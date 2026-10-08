@@ -1,0 +1,306 @@
+{
+  "entities": {
+    "Profile": {
+      "title": "UserProfile",
+      "description": "User profile with role and room status",
+      "type": "object",
+      "properties": {
+        "auth_user_id": { "type": "string" },
+        "full_name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "profile_photo": { "type": "string" },
+        "room_id": { "type": "string" },
+        "role": { "type": "string" },
+        "account_status": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["auth_user_id", "full_name", "email", "role"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Residence room details and occupancy status",
+      "type": "object",
+      "properties": {
+        "room_number": { "type": "string" },
+        "room_type": { "type": "string" },
+        "price_per_semester": { "type": "integer" },
+        "status": { "type": "string" },
+        "description": { "type": "string" },
+        "image_url": { "type": "string" },
+        "floor": { "type": "string" },
+        "occupant_name": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["room_number", "room_type", "price_per_semester", "status"]
+    },
+    "Vacancy": {
+      "title": "RoomVacancy",
+      "description": "Room vacancy announcement by resident or management",
+      "type": "object",
+      "properties": {
+        "room_id": { "type": "string" },
+        "room_number": { "type": "string" },
+        "posted_by": { "type": "string" },
+        "poster_name": { "type": "string" },
+        "poster_phone": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "expected_move_out_date": { "type": "string" },
+        "price_per_semester": { "type": "integer" },
+        "room_type": { "type": "string" },
+        "contact_preference": { "type": "string" },
+        "status": { "type": "string" },
+        "admin_notes": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["room_number", "posted_by", "title", "status"]
+    },
+    "Product": {
+      "title": "MarketplaceProduct",
+      "description": "Student marketplace listing",
+      "type": "object",
+      "properties": {
+        "seller_id": { "type": "string" },
+        "seller_name": { "type": "string" },
+        "seller_phone": { "type": "string" },
+        "category": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "integer" },
+        "quantity": { "type": "integer" },
+        "condition": { "type": "string" },
+        "location": { "type": "string" },
+        "image_url": { "type": "string" },
+        "status": { "type": "string" },
+        "payment_method": { "type": "string" },
+        "payment_number": { "type": "string" },
+        "payment_name": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["seller_id", "name", "price", "status"]
+    },
+    "SellerApplication": {
+      "title": "SellerApplication",
+      "description": "Student seller application for marketplace access",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "seller_name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string" },
+        "business_name": { "type": "string" },
+        "business_description": { "type": "string" },
+        "category": { "type": "string" },
+        "payment_method": { "type": "string" },
+        "payment_number": { "type": "string" },
+        "payment_name": { "type": "string" },
+        "status": { "type": "string" },
+        "admin_notes": { "type": "string" },
+        "submitted_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "seller_name", "phone", "status"]
+    },
+    "Post": {
+      "title": "CommunityPost",
+      "description": "Social community post from resident or admin",
+      "type": "object",
+      "properties": {
+        "author_id": { "type": "string" },
+        "author_name": { "type": "string" },
+        "author_photo": { "type": "string" },
+        "content": { "type": "string" },
+        "post_type": { "type": "string" },
+        "image_url": { "type": "string" },
+        "likes_count": { "type": "integer" },
+        "comments_count": { "type": "integer" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["author_id", "author_name", "content"]
+    },
+    "Comment": {
+      "title": "PostComment",
+      "description": "Comment on a community post",
+      "type": "object",
+      "properties": {
+        "post_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "user_name": { "type": "string" },
+        "user_photo": { "type": "string" },
+        "content": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["post_id", "user_id", "content"]
+    },
+    "PostReaction": {
+      "title": "PostReaction",
+      "description": "Reaction/like on community post",
+      "type": "object",
+      "properties": {
+        "post_id": { "type": "string" },
+        "user_id": { "type": "string" },
+        "reaction_type": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["post_id", "user_id"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Chat conversation between residents/sellers",
+      "type": "object",
+      "properties": {
+        "conversation_type": { "type": "string" },
+        "last_message": { "type": "string" },
+        "product_id": { "type": "string" },
+        "product_name": { "type": "string" },
+        "room_id": { "type": "string" },
+        "room_number": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversation_type"]
+    },
+    "Message": {
+      "title": "ChatMessage",
+      "description": "Message within a conversation",
+      "type": "object",
+      "properties": {
+        "conversation_id": { "type": "string" },
+        "sender_id": { "type": "string" },
+        "sender_name": { "type": "string" },
+        "message_text": { "type": "string" },
+        "attachment_url": { "type": "string" },
+        "attachment_type": { "type": "string" },
+        "message_status": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversation_id", "sender_id", "message_text"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "User notification",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "notification_type": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "reference_type": { "type": "string" },
+        "reference_id": { "type": "string" },
+        "is_read": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "title", "message"]
+    },
+    "SavedItem": {
+      "title": "SavedItem",
+      "description": "Bookmarked room or product",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "item_type": { "type": "string" },
+        "item_id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "price": { "type": "integer" },
+        "image_url": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "item_type", "item_id", "title"]
+    },
+    "CartItem": {
+      "title": "CartItem",
+      "description": "Item in user shopping cart",
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "product_id": { "type": "string" },
+        "product_name": { "type": "string" },
+        "price": { "type": "integer" },
+        "quantity": { "type": "integer" },
+        "image_url": { "type": "string" },
+        "seller_name": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "product_id", "product_name", "price", "quantity"]
+    },
+    "Announcement": {
+      "title": "ResidenceAnnouncement",
+      "description": "Important administration announcement",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "image_url": { "type": "string" },
+        "priority": { "type": "string" },
+        "created_by": { "type": "string" },
+        "status": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content"]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/Profile" },
+      "description": "User profile documents keyed by Auth UID"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Residence rooms catalog"
+    },
+    "/vacancies/{vacancyId}": {
+      "schema": { "$ref": "#/entities/Vacancy" },
+      "description": "Student move-out vacancy notices"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Marketplace products listings"
+    },
+    "/seller_applications/{applicationId}": {
+      "schema": { "$ref": "#/entities/SellerApplication" },
+      "description": "Seller onboarding applications"
+    },
+    "/posts/{postId}": {
+      "schema": { "$ref": "#/entities/Post" },
+      "description": "Community feed posts"
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Comments on community posts"
+    },
+    "/post_reactions/{reactionId}": {
+      "schema": { "$ref": "#/entities/PostReaction" },
+      "description": "User reactions to posts"
+    },
+    "/conversations/{conversationId}": {
+      "schema": { "$ref": "#/entities/Conversation" },
+      "description": "Chat conversations"
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/Message" },
+      "description": "Chat messages across conversations"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User specific notifications"
+    },
+    "/saved_items/{savedId}": {
+      "schema": { "$ref": "#/entities/SavedItem" },
+      "description": "User saved products and rooms"
+    },
+    "/cart_items/{cartItemId}": {
+      "schema": { "$ref": "#/entities/CartItem" },
+      "description": "User cart items"
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Official management announcements"
+    }
+  }
+}

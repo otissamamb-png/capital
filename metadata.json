@@ -1,0 +1,6 @@
+{
+  "name": "Capital Home Residence",
+  "description": "Capital Home Residence student living app — Live. Connect. Buy. Sell. Manage rooms, vacancies, marketplace, and community.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
