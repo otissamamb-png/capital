@@ -243,6 +243,57 @@
         "created_at": { "type": "string", "format": "date-time" }
       },
       "required": ["title", "content"]
+    },
+    "Order": {
+      "title": "OrderRecord",
+      "description": "Marketplace purchase order",
+      "type": "object",
+      "properties": {
+        "order_number": { "type": "string" },
+        "buyer_id": { "type": "string" },
+        "buyer_name": { "type": "string" },
+        "buyer_phone": { "type": "string" },
+        "seller_id": { "type": "string" },
+        "seller_name": { "type": "string" },
+        "total_amount": { "type": "integer" },
+        "order_status": { "type": "string" },
+        "payment_status": { "type": "string" },
+        "payment_method": { "type": "string" },
+        "delivery_method": { "type": "string" },
+        "pickup_point": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["buyer_id", "seller_id", "total_amount", "order_status"]
+    },
+    "Payment": {
+      "title": "PaymentRecord",
+      "description": "Manual M-Pesa payment record with transaction reference",
+      "type": "object",
+      "properties": {
+        "order_id": { "type": "string" },
+        "buyer_id": { "type": "string" },
+        "seller_id": { "type": "string" },
+        "amount": { "type": "integer" },
+        "payment_method": { "type": "string" },
+        "transaction_reference": { "type": "string" },
+        "payment_status": { "type": "string" },
+        "verified_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["order_id", "amount", "payment_status"]
+    },
+    "ProductImage": {
+      "title": "ProductImage",
+      "description": "Product gallery image",
+      "type": "object",
+      "properties": {
+        "product_id": { "type": "string" },
+        "image_url": { "type": "string" },
+        "display_order": { "type": "integer" },
+        "is_cover": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["product_id", "image_url"]
     }
   },
   "firestore": {
@@ -297,6 +348,18 @@
     "/cart_items/{cartItemId}": {
       "schema": { "$ref": "#/entities/CartItem" },
       "description": "User cart items"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Marketplace purchase orders"
+    },
+    "/payments/{paymentId}": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "M-Pesa payment records"
+    },
+    "/product_images/{imageId}": {
+      "schema": { "$ref": "#/entities/ProductImage" },
+      "description": "Product images table"
     },
     "/announcements/{announcementId}": {
       "schema": { "$ref": "#/entities/Announcement" },
