@@ -28,6 +28,8 @@ import com.example.ui.home.HomeScreen
 import com.example.ui.marketplace.AddProductDialog
 import com.example.ui.marketplace.CartScreen
 import com.example.ui.marketplace.MarketplaceScreen
+import com.example.ui.marketplace.OrderTrackingScreen
+import com.example.ui.marketplace.PaymentScreen
 import com.example.ui.marketplace.ProductDetailScreen
 import com.example.ui.notifications.NotificationsScreen
 import com.example.ui.profile.AdminDashboardScreen
@@ -37,6 +39,7 @@ import com.example.ui.rooms.AnnounceVacancyDialog
 import com.example.ui.rooms.RoomDetailScreen
 import com.example.ui.rooms.RoomsScreen
 import com.example.ui.seller.SellerApplicationScreen
+import com.example.ui.seller.SellerDashboardScreen
 import com.example.ui.theme.CapitalHomeTheme
 import com.example.ui.theme.RoyalBlue
 import com.example.ui.theme.Slate400
@@ -128,6 +131,9 @@ fun MainResidenceContent(
     val announcements by repository.observeAnnouncements().collectAsStateWithLifecycle(initialValue = emptyList())
     val sellerApplications by repository.observeSellerApplications().collectAsStateWithLifecycle(initialValue = emptyList())
     val likedPostIds by repository.observeUserReactions(userId).collectAsStateWithLifecycle(initialValue = emptySet())
+    val buyerOrders by repository.observeBuyerOrders(userId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val sellerOrders by repository.observeSellerOrders(userId).collectAsStateWithLifecycle(initialValue = emptyList())
+    val allOrders by repository.observeAllOrders().collectAsStateWithLifecycle(initialValue = emptyList())
 
     // Ensure profile is created in database if not present
     LaunchedEffect(userId) {
@@ -162,6 +168,19 @@ fun MainResidenceContent(
     var showSellerAppScreen by remember { mutableStateOf(false) }
     var showAddProductDialog by remember { mutableStateOf(false) }
     var showAdminDashboardScreen by remember { mutableStateOf(false) }
+    var showSellerDashboardScreen by remember { mutableStateOf(false) }
+    var showOrdersScreen by remember { mutableStateOf(false) }
+    var activePaymentOrder by remember { mutableStateOf<OrderRecord?>(null) }
+
+    // Automatic restoration of unfinished payments (Requirement 18 & 24)
+    LaunchedEffect(buyerOrders) {
+        if (activePaymentOrder == null) {
+            val pendingOrder = buyerOrders.firstOrNull { it.payment_status == "Payment Pending" }
+            if (pendingOrder != null) {
+                activePaymentOrder = pendingOrder
+            }
+        }
+    }
 
     // Comments for active post dialog
     val activeComments by remember(commentsPost) {
@@ -227,6 +246,21 @@ fun MainResidenceContent(
                 onAddToCart = { cartItem ->
                     coroutineScope.launch { repository.addToCart(cartItem) }
                 },
+                onBuyNow = { prod, qty ->
+                    coroutineScope.launch {
+                        val result = repository.createOrder(
+                            product = prod,
+                            quantity = qty,
+                            buyerName = profile?.full_name ?: userName,
+                            buyerPhone = profile?.phone ?: "+254 700 000 000",
+                            pickupOrDelivery = prod.delivery_option.ifEmpty { "Pickup at Capital Home Residence" }
+                        )
+                        result.getOrNull()?.let { order ->
+                            selectedProduct = null
+                            activePaymentOrder = order
+                        }
+                    }
+                },
                 onChatWithSeller = { prod ->
                     coroutineScope.launch {
                         val result = repository.startOrGetConversation(
@@ -282,6 +316,54 @@ fun MainResidenceContent(
             )
         }
 
+        activePaymentOrder != null -> {
+            PaymentScreen(
+                order = activePaymentOrder!!,
+                onSubmitReference = { ref ->
+                    coroutineScope.launch {
+                        repository.submitMpesaReference(activePaymentOrder!!.id, ref)
+                        activePaymentOrder = activePaymentOrder!!.copy(
+                            payment_status = "Reference Submitted",
+                            order_status = "Payment Verification",
+                            mpesa_reference = ref
+                        )
+                    }
+                },
+                onBack = { activePaymentOrder = null }
+            )
+        }
+
+        showOrdersScreen -> {
+            OrderTrackingScreen(
+                orders = buyerOrders,
+                onOrderClick = { order ->
+                    if (order.payment_status == "Payment Pending" || order.payment_status == "Reference Submitted") {
+                        activePaymentOrder = order
+                    }
+                },
+                onBack = { showOrdersScreen = false }
+            )
+        }
+
+        showSellerDashboardScreen -> {
+            SellerDashboardScreen(
+                products = products.filter { it.seller_id == userId },
+                orders = sellerOrders,
+                onAddProductClick = { showAddProductDialog = true },
+                onVerifyPayment = { orderId, confirmed, reason ->
+                    coroutineScope.launch {
+                        repository.verifyPayment(orderId, confirmed, reason)
+                    }
+                },
+                onUpdateOrderStatus = { orderId, newStatus ->
+                    coroutineScope.launch {
+                        repository.updateOrderStatus(orderId, newStatus)
+                    }
+                },
+                onBack = { showSellerDashboardScreen = false }
+            )
+        }
+
         showCartScreen -> {
             CartScreen(
                 cartItems = cartItems,
@@ -290,6 +372,28 @@ fun MainResidenceContent(
                 },
                 onClearCart = {
                     coroutineScope.launch { repository.clearCart(userId) }
+                },
+                onCheckoutCart = {
+                    val firstItem = cartItems.firstOrNull()
+                    if (firstItem != null) {
+                        val prod = products.find { it.id == firstItem.product_id }
+                        if (prod != null) {
+                            coroutineScope.launch {
+                                val result = repository.createOrder(
+                                    product = prod,
+                                    quantity = firstItem.quantity,
+                                    buyerName = profile?.full_name ?: userName,
+                                    buyerPhone = profile?.phone ?: "+254 700 000 000",
+                                    pickupOrDelivery = prod.delivery_option.ifEmpty { "Pickup at Capital Home Residence" }
+                                )
+                                result.getOrNull()?.let { order ->
+                                    repository.removeFromCart(firstItem.id.ifEmpty { firstItem.product_id })
+                                    showCartScreen = false
+                                    activePaymentOrder = order
+                                }
+                            }
+                        }
+                    }
                 },
                 onBack = { showCartScreen = false }
             )
@@ -330,10 +434,22 @@ fun MainResidenceContent(
             AdminDashboardScreen(
                 rooms = rooms,
                 sellerApplications = sellerApplications,
+                products = products,
+                orders = allOrders,
                 vacancies = vacancies,
                 announcements = announcements,
                 onReviewSeller = { targetUserId, approve ->
                     coroutineScope.launch { repository.reviewSellerApplication(targetUserId, approve) }
+                },
+                onToggleProductVisibility = { prodId, hide ->
+                    coroutineScope.launch {
+                        repository.updateProductStatus(prodId, if (hide) "Hidden" else "Active")
+                    }
+                },
+                onVerifyPayment = { orderId, confirmed, reason ->
+                    coroutineScope.launch {
+                        repository.verifyPayment(orderId, confirmed, reason)
+                    }
                 },
                 onToggleRoomStatus = { room ->
                     coroutineScope.launch {
@@ -473,9 +589,10 @@ fun MainResidenceContent(
                         savedProductIds = savedProductIds,
                         onProductClick = { prod -> selectedProduct = prod },
                         onCartClick = { showCartScreen = true },
+                        onOrdersClick = { showOrdersScreen = true },
                         onSellClick = {
                             if (profile?.role == "seller" || profile?.role == "admin") {
-                                showAddProductDialog = true
+                                showSellerDashboardScreen = true
                             } else {
                                 showSellerAppScreen = true
                             }
@@ -508,8 +625,15 @@ fun MainResidenceContent(
                             onNavigateToMyVacancies = { showAnnounceVacancyDialog = true },
                             onNavigateToSavedItems = { showSavedItemsScreen = true },
                             onNavigateToCart = { showCartScreen = true },
+                            onNavigateToOrders = { showOrdersScreen = true },
                             onNavigateToNotifications = { showNotificationsScreen = true },
-                            onNavigateToSellerApp = { showSellerAppScreen = true },
+                            onNavigateToSellerApp = {
+                                if (profile?.role == "seller") {
+                                    showSellerDashboardScreen = true
+                                } else {
+                                    showSellerAppScreen = true
+                                }
+                            },
                             onNavigateToAdminDashboard = { showAdminDashboardScreen = true },
                             onUpdateProfile = { updated ->
                                 coroutineScope.launch { repository.saveProfile(updated) }

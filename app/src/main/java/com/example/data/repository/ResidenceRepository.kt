@@ -573,21 +573,48 @@ class ResidenceRepository(
                 "seller_name" to product.seller_name,
                 "seller_phone" to product.seller_phone,
                 "category" to product.category,
+                "subcategory" to product.subcategory,
                 "name" to product.name,
                 "description" to product.description,
                 "price" to product.price,
+                "original_price" to product.original_price,
                 "quantity" to product.quantity,
                 "condition" to product.condition,
+                "brand" to product.brand,
+                "model" to product.model,
+                "color" to product.color,
+                "size" to product.size,
+                "material" to product.material,
+                "additional_specs" to product.additional_specs,
                 "location" to product.location,
+                "delivery_option" to product.delivery_option,
                 "image_url" to product.image_url,
-                "status" to "Active",
+                "image_urls" to product.image_urls,
+                "status" to "Active", // Immediately Active for approved sellers, no pending queue
                 "payment_method" to product.payment_method,
                 "payment_number" to product.payment_number,
                 "payment_name" to product.payment_name,
+                "rating" to 4.8,
+                "review_count" to 1,
                 "created_at" to FieldValue.serverTimestamp(),
                 "updated_at" to FieldValue.serverTimestamp()
             )
             ref.set(data).await()
+
+            // Also persist individual product_images sub-records
+            product.image_urls.forEachIndexed { index, url ->
+                val imgRef = db.collection("product_images").document()
+                imgRef.set(
+                    mapOf(
+                        "product_id" to ref.id,
+                        "image_url" to url,
+                        "display_order" to index,
+                        "is_cover" to (index == 0),
+                        "created_at" to FieldValue.serverTimestamp()
+                    )
+                )
+            }
+
             Result.success(ref.id)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.CREATE, "products")
@@ -1078,6 +1105,334 @@ class ResidenceRepository(
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.DELETE, "cart_items")
+            Result.failure(e)
+        }
+    }
+
+    // ==========================================
+    // ORDERS & MANUAL M-PESA PAYMENTS (Kilimall-Inspired)
+    // ==========================================
+    fun observeBuyerOrders(buyerId: String): Flow<List<OrderRecord>> {
+        return db.collection("orders")
+            .whereEqualTo("buyer_id", buyerId)
+            .orderBy("created_at", Query.Direction.DESCENDING)
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    doc.toObject(OrderRecord::class.java)?.copy(id = doc.id)
+                }
+            }
+            .catch { e ->
+                handleFirestoreError(e as Exception, OperationType.LIST, "orders")
+                emit(emptyList())
+            }
+    }
+
+    fun observeSellerOrders(sellerId: String): Flow<List<OrderRecord>> {
+        return db.collection("orders")
+            .whereEqualTo("seller_id", sellerId)
+            .orderBy("created_at", Query.Direction.DESCENDING)
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    doc.toObject(OrderRecord::class.java)?.copy(id = doc.id)
+                }
+            }
+            .catch { e ->
+                handleFirestoreError(e as Exception, OperationType.LIST, "orders")
+                emit(emptyList())
+            }
+    }
+
+    fun observeAllOrders(): Flow<List<OrderRecord>> {
+        return db.collection("orders")
+            .orderBy("created_at", Query.Direction.DESCENDING)
+            .snapshots()
+            .map { snap ->
+                snap.documents.mapNotNull { doc ->
+                    doc.toObject(OrderRecord::class.java)?.copy(id = doc.id)
+                }
+            }
+            .catch { e ->
+                handleFirestoreError(e as Exception, OperationType.LIST, "orders")
+                emit(emptyList())
+            }
+    }
+
+    suspend fun createOrder(
+        product: MarketplaceProduct,
+        quantity: Long,
+        buyerName: String,
+        buyerPhone: String,
+        pickupOrDelivery: String
+    ): Result<OrderRecord> {
+        val uid = requireUserId()
+        return try {
+            // Verify stock
+            val prodSnap = db.collection("products").document(product.id).get().await()
+            val availableStock = prodSnap.getLong("quantity") ?: product.quantity
+            if (availableStock < quantity) {
+                return Result.failure(Exception("Insufficient stock. Only $availableStock items remaining."))
+            }
+
+            val orderDoc = db.collection("orders").document()
+            val orderNum = "CHR-" + (1000..9999).random()
+            val total = product.price * quantity
+
+            val orderData = mapOf(
+                "order_number" to orderNum,
+                "buyer_id" to uid,
+                "buyer_name" to buyerName,
+                "buyer_phone" to buyerPhone,
+                "seller_id" to product.seller_id,
+                "seller_name" to product.seller_name,
+                "product_id" to product.id,
+                "product_name" to product.name,
+                "product_image" to product.image_url,
+                "quantity" to quantity,
+                "unit_price" to product.price,
+                "total_amount" to total,
+                "order_status" to "Pending Payment",
+                "payment_status" to "Payment Pending",
+                "payment_method" to product.payment_method,
+                "seller_payment_number" to product.payment_number,
+                "seller_payment_name" to product.payment_name,
+                "pickup_or_delivery" to pickupOrDelivery,
+                "mpesa_reference" to "",
+                "rejection_reason" to "",
+                "created_at" to FieldValue.serverTimestamp(),
+                "updated_at" to FieldValue.serverTimestamp()
+            )
+            orderDoc.set(orderData).await()
+
+            // Safely reserve/reduce inventory
+            db.collection("products").document(product.id)
+                .update("quantity", FieldValue.increment(-quantity)).await()
+
+            // Create persistent payment record with snapshot of seller payment details
+            val payDoc = db.collection("payments").document()
+            val payData = mapOf(
+                "order_id" to orderDoc.id,
+                "order_number" to orderNum,
+                "buyer_id" to uid,
+                "seller_id" to product.seller_id,
+                "amount" to total,
+                "payment_method" to product.payment_method,
+                "seller_payment_details_snapshot" to mapOf(
+                    "method" to product.payment_method,
+                    "number" to product.payment_number,
+                    "name" to product.payment_name,
+                    "location" to product.location
+                ),
+                "payment_status" to "Payment Pending",
+                "mpesa_reference" to "",
+                "created_at" to FieldValue.serverTimestamp(),
+                "updated_at" to FieldValue.serverTimestamp()
+            )
+            payDoc.set(payData).await()
+
+            val created = OrderRecord(
+                id = orderDoc.id,
+                order_number = orderNum,
+                buyer_id = uid,
+                buyer_name = buyerName,
+                buyer_phone = buyerPhone,
+                seller_id = product.seller_id,
+                seller_name = product.seller_name,
+                product_id = product.id,
+                product_name = product.name,
+                product_image = product.image_url,
+                quantity = quantity,
+                unit_price = product.price,
+                total_amount = total,
+                order_status = "Pending Payment",
+                payment_status = "Payment Pending",
+                payment_method = product.payment_method,
+                seller_payment_number = product.payment_number,
+                seller_payment_name = product.payment_name,
+                pickup_or_delivery = pickupOrDelivery
+            )
+            Result.success(created)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.CREATE, "orders")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun submitMpesaReference(orderId: String, referenceCode: String): Result<Unit> {
+        val trimmed = referenceCode.trim().uppercase()
+        if (trimmed.length < 5) {
+            return Result.failure(Exception("Please enter a valid M-Pesa transaction code (e.g. QK78HJ23PX)"))
+        }
+
+        return try {
+            val orderRef = db.collection("orders").document(orderId)
+            val orderSnap = orderRef.get().await()
+            val sellerId = orderSnap.getString("seller_id") ?: ""
+            val orderNum = orderSnap.getString("order_number") ?: ""
+            val buyerName = orderSnap.getString("buyer_name") ?: "Buyer"
+
+            // Update order
+            orderRef.update(
+                mapOf(
+                    "payment_status" to "Reference Submitted",
+                    "order_status" to "Payment Verification",
+                    "mpesa_reference" to trimmed,
+                    "updated_at" to FieldValue.serverTimestamp()
+                )
+            ).await()
+
+            // Update payment record
+            val paymentsQuery = db.collection("payments").whereEqualTo("order_id", orderId).get().await()
+            for (p in paymentsQuery.documents) {
+                p.reference.update(
+                    mapOf(
+                        "payment_status" to "Reference Submitted",
+                        "mpesa_reference" to trimmed,
+                        "submitted_at" to FieldValue.serverTimestamp(),
+                        "updated_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+
+            // Immediately send persistent notification to the seller
+            if (sellerId.isNotEmpty()) {
+                val notifDoc = db.collection("notifications").document()
+                notifDoc.set(
+                    mapOf(
+                        "user_id" to sellerId,
+                        "notification_type" to "order",
+                        "title" to "M-Pesa Reference Submitted",
+                        "message" to "$buyerName submitted M-Pesa reference $trimmed for Order #$orderNum. Please verify payment.",
+                        "reference_type" to "order",
+                        "reference_id" to orderId,
+                        "is_read" to false,
+                        "created_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+
+            // Show push notification on device
+            context?.let { ctx ->
+                com.example.util.NotificationHelper.showNotification(
+                    ctx,
+                    "Payment Reference Submitted",
+                    "M-Pesa reference $trimmed sent for verification on Order #$orderNum"
+                )
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "orders/$orderId")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun verifyPayment(orderId: String, confirmed: Boolean, rejectionReason: String = ""): Result<Unit> {
+        val uid = requireUserId()
+        return try {
+            val orderRef = db.collection("orders").document(orderId)
+            val snap = orderRef.get().await()
+            val buyerId = snap.getString("buyer_id") ?: ""
+            val orderNum = snap.getString("order_number") ?: ""
+
+            val newPayStatus = if (confirmed) "Payment Confirmed" else "Payment Rejected"
+            val newOrderStatus = if (confirmed) "Processing" else "Pending Payment"
+
+            orderRef.update(
+                mapOf(
+                    "payment_status" to newPayStatus,
+                    "order_status" to newOrderStatus,
+                    "rejection_reason" to rejectionReason,
+                    "updated_at" to FieldValue.serverTimestamp()
+                )
+            ).await()
+
+            val paymentsQuery = db.collection("payments").whereEqualTo("order_id", orderId).get().await()
+            for (p in paymentsQuery.documents) {
+                p.reference.update(
+                    mapOf(
+                        "payment_status" to newPayStatus,
+                        "verified_by" to uid,
+                        "verified_at" to FieldValue.serverTimestamp(),
+                        "rejection_reason" to rejectionReason,
+                        "updated_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            }
+
+            // Notify buyer
+            if (buyerId.isNotEmpty()) {
+                val msg = if (confirmed) {
+                    "Your M-Pesa payment for Order #$orderNum has been confirmed! Your order is now processing."
+                } else {
+                    "Payment reference for Order #$orderNum was rejected: ${rejectionReason.ifEmpty { "Transaction could not be verified." }}"
+                }
+                db.collection("notifications").document().set(
+                    mapOf(
+                        "user_id" to buyerId,
+                        "notification_type" to "order",
+                        "title" to if (confirmed) "Payment Confirmed!" else "Payment Needs Attention",
+                        "message" to msg,
+                        "reference_type" to "order",
+                        "reference_id" to orderId,
+                        "is_read" to false,
+                        "created_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+
+                context?.let { ctx ->
+                    com.example.util.NotificationHelper.showNotification(
+                        ctx,
+                        if (confirmed) "Order #$orderNum Confirmed!" else "Order #$orderNum Update",
+                        msg
+                    )
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "orders/$orderId")
+            Result.failure(e)
+        }
+    }
+
+    suspend fun updateOrderStatus(orderId: String, newStatus: String): Result<Unit> {
+        return try {
+            val orderRef = db.collection("orders").document(orderId)
+            orderRef.update("order_status", newStatus, "updated_at", FieldValue.serverTimestamp()).await()
+
+            val snap = orderRef.get().await()
+            val buyerId = snap.getString("buyer_id") ?: ""
+            val orderNum = snap.getString("order_number") ?: ""
+
+            if (buyerId.isNotEmpty()) {
+                val msg = "Order #$orderNum status updated to: $newStatus"
+                db.collection("notifications").document().set(
+                    mapOf(
+                        "user_id" to buyerId,
+                        "notification_type" to "order",
+                        "title" to "Order Status Update",
+                        "message" to msg,
+                        "reference_type" to "order",
+                        "reference_id" to orderId,
+                        "is_read" to false,
+                        "created_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+
+                context?.let { ctx ->
+                    com.example.util.NotificationHelper.showNotification(
+                        ctx,
+                        "Order #$orderNum: $newStatus",
+                        msg
+                    )
+                }
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "orders/$orderId")
             Result.failure(e)
         }
     }

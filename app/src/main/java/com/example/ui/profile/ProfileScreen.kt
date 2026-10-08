@@ -53,6 +53,7 @@ fun ProfileScreen(
     onNavigateToMyVacancies: () -> Unit,
     onNavigateToSavedItems: () -> Unit,
     onNavigateToCart: () -> Unit,
+    onNavigateToOrders: () -> Unit = {},
     onNavigateToNotifications: () -> Unit,
     onNavigateToSellerApp: () -> Unit,
     onNavigateToAdminDashboard: () -> Unit,
@@ -343,6 +344,12 @@ fun ProfileScreen(
                         icon = Icons.Default.ShoppingCart,
                         title = "My Shopping Cart",
                         onClick = onNavigateToCart
+                    )
+                    HorizontalDivider(color = Slate100, modifier = Modifier.padding(start = 52.dp))
+                    ProfileMenuRow(
+                        icon = Icons.Default.ReceiptLong,
+                        title = "My Orders & Purchases",
+                        onClick = onNavigateToOrders
                     )
                 }
             }

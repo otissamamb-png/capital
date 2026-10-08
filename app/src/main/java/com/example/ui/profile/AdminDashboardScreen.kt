@@ -27,22 +27,26 @@ import com.example.ui.theme.*
 fun AdminDashboardScreen(
     rooms: List<RoomItem>,
     sellerApplications: List<SellerApplicationData>,
+    products: List<MarketplaceProduct> = emptyList(),
+    orders: List<OrderRecord> = emptyList(),
     vacancies: List<VacancyItem>,
     announcements: List<ResidenceAnnouncement>,
     onReviewSeller: (String, Boolean) -> Unit,
+    onToggleProductVisibility: (productId: String, hide: Boolean) -> Unit = { _, _ -> },
+    onVerifyPayment: (orderId: String, confirmed: Boolean, reason: String) -> Unit = { _, _, _ -> },
     onToggleRoomStatus: (RoomItem) -> Unit,
     onCreateAnnouncement: (String, String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
-    var selectedSection by remember { mutableStateOf("Overview") } // "Overview", "Sellers", "Rooms", "Announce"
+    var selectedSection by remember { mutableStateOf("Overview") } // "Overview", "Sellers", "Products", "Orders", "Rooms", "Announcements"
     var showNewAnnouncementDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Administration", fontWeight = FontWeight.Bold) },
+                title = { Text("Administration Portal", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("admin_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -65,13 +69,13 @@ fun AdminDashboardScreen(
                 .padding(paddingValues)
         ) {
             // Section Switcher
-            Row(
+            androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                listOf("Overview", "Sellers", "Rooms", "Announcements").forEach { section ->
+                items(listOf("Overview", "Sellers", "Products", "Orders", "Rooms", "Announcements")) { section ->
                     val isSelected = selectedSection == section
                     FilterChip(
                         selected = isSelected,
@@ -80,8 +84,7 @@ fun AdminDashboardScreen(
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = RoyalBlue,
                             selectedLabelColor = Color.White
-                        ),
-                        modifier = Modifier.weight(1f)
+                        )
                     )
                 }
             }
@@ -96,28 +99,28 @@ fun AdminDashboardScreen(
                 when (selectedSection) {
                     "Overview" -> {
                         item {
-                            Text("Residence Metrics", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                            Text("Marketplace & Residence Metrics", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Slate900)
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                MetricCard("Total Rooms", "${rooms.size}", RoyalBlue, Modifier.weight(1f))
-                                MetricCard("Available", "${rooms.count { it.status == "Available" }}", EmeraldAvailable, Modifier.weight(1f))
-                                MetricCard("Occupied", "${rooms.count { it.status == "Occupied" }}", Slate700, Modifier.weight(1f))
+                                MetricCard("Active Prods", "${products.count { it.status == "Active" }}", EmeraldAvailable, Modifier.weight(1f))
+                                MetricCard("Orders", "${orders.size}", RoyalBlue, Modifier.weight(1f))
+                                MetricCard("Sellers", "${sellerApplications.count { it.status == "Approved" }}", AmberPending, Modifier.weight(1f))
                             }
                         }
 
                         item {
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("Pending Actions", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                            Text("Pending Action Items", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Slate900)
                             Spacer(modifier = Modifier.height(10.dp))
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 MetricCard("Seller Apps", "${sellerApplications.count { it.status == "Pending" }}", AmberPending, Modifier.weight(1f))
-                                MetricCard("Vacancies", "${vacancies.size}", RoyalBlue, Modifier.weight(1f))
+                                MetricCard("M-Pesa Reviews", "${orders.count { it.payment_status == "Reference Submitted" }}", RoyalBlue, Modifier.weight(1f))
                             }
                         }
                     }
@@ -125,6 +128,7 @@ fun AdminDashboardScreen(
                     "Sellers" -> {
                         item {
                             Text("Seller Applications (${sellerApplications.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Approval happens only once. Once approved, sellers publish products directly without individual approval.", fontSize = 11.sp, color = Slate500)
                         }
                         if (sellerApplications.isEmpty()) {
                             item {
@@ -168,9 +172,87 @@ fun AdminDashboardScreen(
                                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldAvailable),
                                                     modifier = Modifier.weight(1f)
                                                 ) {
-                                                    Text("Approve")
+                                                    Text("Approve Seller")
                                                 }
                                             }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    "Products" -> {
+                        item {
+                            Text("Marketplace Moderation (${products.size} Products)", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            Text("Approved sellers publish automatically. As admin you can hide or restore products if needed.", fontSize = 11.sp, color = Slate500)
+                        }
+                        items(products, key = { it.id }) { prod ->
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(prod.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text("KSh ${"%,d".format(prod.price)} • Sold by ${prod.seller_name}", fontSize = 12.sp, color = Slate500)
+                                        Text("Status: ${prod.status} • Stock: ${prod.quantity}", fontSize = 11.sp, color = RoyalBlue)
+                                    }
+                                    Button(
+                                        onClick = { onToggleProductVisibility(prod.id, prod.status == "Active") },
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (prod.status == "Active") RoseOccupied else EmeraldAvailable
+                                        ),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier.height(32.dp)
+                                    ) {
+                                        Text(if (prod.status == "Active") "Hide" else "Restore", fontSize = 11.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    "Orders" -> {
+                        item {
+                            Text("All Orders & M-Pesa Verifications (${orders.size})", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        }
+                        items(orders, key = { it.id }) { order ->
+                            Card(
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Order #${order.order_number}", fontWeight = FontWeight.Bold, color = RoyalBlue)
+                                        Text("KSh ${"%,d".format(order.total_amount)}", fontWeight = FontWeight.Black)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("${order.product_name} (Qty ${order.quantity})", fontSize = 13.sp)
+                                    Text("Buyer: ${order.buyer_name} • Seller: ${order.seller_name}", fontSize = 11.sp, color = Slate500)
+                                    if (order.mpesa_reference.isNotEmpty()) {
+                                        Text("M-Pesa Code: ${order.mpesa_reference}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = RoyalBlue)
+                                    }
+                                    Text("Status: ${order.payment_status} / ${order.order_status}", fontSize = 11.sp, color = Slate600)
+
+                                    if (order.payment_status == "Reference Submitted") {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Button(
+                                            onClick = { onVerifyPayment(order.id, true, "") },
+                                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldAvailable),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(36.dp)
+                                        ) {
+                                            Text("Confirm Payment (Admin)", fontSize = 12.sp)
                                         }
                                     }
                                 }

@@ -19,16 +19,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.CartItemData
+import coil.compose.AsyncImage
 import com.example.data.model.MarketplaceProduct
 import com.example.data.model.SavedItemData
 import com.example.ui.components.EmptyStateView
-import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,6 +39,7 @@ fun MarketplaceScreen(
     savedProductIds: Set<String>,
     onProductClick: (MarketplaceProduct) -> Unit,
     onCartClick: () -> Unit,
+    onOrdersClick: () -> Unit,
     onSellClick: () -> Unit,
     onToggleSave: (SavedItemData) -> Unit,
     modifier: Modifier = Modifier
@@ -47,11 +48,15 @@ fun MarketplaceScreen(
     var selectedCategory by remember { mutableStateOf("All") }
 
     val categories = listOf(
-        "All", "Electronics", "Fashion", "Food", "Books", "Beauty", "Accessories", "Services", "Household"
+        "All", "Electronics", "Phones", "Fashion", "Shoes", "Food", "Books", "Furniture", "Household"
     )
 
-    val filteredProducts = remember(products, searchQuery, selectedCategory) {
-        products.filter { prod ->
+    val activeProducts = remember(products) {
+        products.filter { it.status.equals("Active", ignoreCase = true) }
+    }
+
+    val filteredProducts = remember(activeProducts, searchQuery, selectedCategory) {
+        activeProducts.filter { prod ->
             val matchesSearch = searchQuery.isEmpty() ||
                     prod.name.contains(searchQuery, ignoreCase = true) ||
                     prod.description.contains(searchQuery, ignoreCase = true) ||
@@ -84,22 +89,13 @@ fun MarketplaceScreen(
                     )
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        // Sell Button
-                        Button(
-                            onClick = onSellClick,
-                            colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .testTag("marketplace_sell_button")
+                        // Orders Button
+                        IconButton(
+                            onClick = onOrdersClick,
+                            modifier = Modifier.testTag("marketplace_orders_button")
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Sell", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.ReceiptLong, contentDescription = "My Orders", tint = Slate700)
                         }
-
-                        Spacer(modifier = Modifier.width(8.dp))
 
                         // Cart Button with badge
                         IconButton(
@@ -122,6 +118,23 @@ fun MarketplaceScreen(
                                 )
                             }
                         }
+
+                        Spacer(modifier = Modifier.width(4.dp))
+
+                        // Sell Button
+                        Button(
+                            onClick = onSellClick,
+                            colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .height(36.dp)
+                                .testTag("marketplace_sell_button")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Sell", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
 
@@ -131,7 +144,7 @@ fun MarketplaceScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search products...", fontSize = 14.sp, color = Slate400) },
+                    placeholder = { Text("Search products, brands, sellers...", fontSize = 14.sp, color = Slate400) },
                     leadingIcon = {
                         Icon(Icons.Default.Search, contentDescription = null, tint = Slate400)
                     },
@@ -256,27 +269,44 @@ fun ProductGridCard(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(130.dp)
+                    .height(140.dp)
                     .background(Slate100)
             ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    val icon = when (product.category.lowercase()) {
-                        "electronics" -> Icons.Default.Headphones
-                        "fashion" -> Icons.Default.Checkroom
-                        "food" -> Icons.Default.Fastfood
-                        "books" -> Icons.Default.MenuBook
-                        "beauty" -> Icons.Default.Spa
-                        else -> Icons.Default.ShoppingBag
-                    }
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = RoyalBlue,
-                        modifier = Modifier.size(50.dp)
+                if (product.image_url.isNotEmpty()) {
+                    AsyncImage(
+                        model = product.image_url,
+                        contentDescription = product.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        val icon = when (product.category.lowercase()) {
+                            "electronics", "phones" -> Icons.Default.Headphones
+                            "fashion", "shoes" -> Icons.Default.Checkroom
+                            "food" -> Icons.Default.Fastfood
+                            "books" -> Icons.Default.MenuBook
+                            else -> Icons.Default.ShoppingBag
+                        }
+                        Icon(imageVector = icon, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(46.dp))
+                    }
+                }
+
+                // Discount tag if original price > price
+                if (product.discountPercent > 0) {
+                    Surface(
+                        color = RoseOccupied,
+                        shape = RoundedCornerShape(topStart = 0.dp, bottomEnd = 10.dp),
+                        modifier = Modifier.align(Alignment.TopStart)
+                    ) {
+                        Text(
+                            text = "${product.discountPercent}% OFF",
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
                 }
 
                 // Favorite Heart Button
@@ -310,12 +340,33 @@ fun ProductGridCard(
 
                 Spacer(modifier = Modifier.height(2.dp))
 
-                Text(
-                    text = "KSh ${"%,d".format(product.price)}",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Black,
-                    color = RoyalBlue
-                )
+                Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "KSh ${"%,d".format(product.price)}",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Black,
+                        color = RoyalBlue
+                    )
+                    if (product.original_price > product.price) {
+                        Text(
+                            text = "KSh ${"%,d".format(product.original_price)}",
+                            fontSize = 11.sp,
+                            color = Slate400,
+                            textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = Color(0xFFF59E0B), modifier = Modifier.size(12.dp))
+                    Text(
+                        text = " ${product.rating} (${product.review_count})",
+                        fontSize = 10.sp,
+                        color = Slate500
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
@@ -327,9 +378,28 @@ fun ProductGridCard(
                     overflow = TextOverflow.Ellipsis
                 )
 
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
 
-                StatusBadge(status = product.status)
+                Surface(
+                    color = when (product.stockStatus) {
+                        "In Stock" -> EmeraldLight
+                        "Low Stock" -> AmberLight
+                        else -> RoseLight
+                    },
+                    shape = RoundedCornerShape(4.dp)
+                ) {
+                    Text(
+                        text = product.stockStatus,
+                        color = when (product.stockStatus) {
+                            "In Stock" -> EmeraldAvailable
+                            "Low Stock" -> AmberPending
+                            else -> RoseOccupied
+                        },
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
             }
         }
     }

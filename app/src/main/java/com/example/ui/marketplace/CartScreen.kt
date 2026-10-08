@@ -29,11 +29,11 @@ fun CartScreen(
     cartItems: List<CartItemData>,
     onRemoveItem: (String) -> Unit,
     onClearCart: () -> Unit,
+    onCheckoutCart: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
-    var showCheckoutDialog by remember { mutableStateOf(false) }
 
     val totalAmount = remember(cartItems) {
         cartItems.sumOf { it.price * it.quantity }
@@ -42,7 +42,7 @@ fun CartScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("My Shopping Cart", fontWeight = FontWeight.Bold) },
+                title = { Text("Shopping Cart", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("cart_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -81,15 +81,15 @@ fun CartScreen(
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         Button(
-                            onClick = { showCheckoutDialog = true },
+                            onClick = onCheckoutCart,
                             colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(50.dp)
+                                .height(52.dp)
                                 .testTag("checkout_button")
                         ) {
-                            Text("Proceed with Sellers (${cartItems.size} items)", fontWeight = FontWeight.Bold)
+                            Text("Proceed to M-Pesa Checkout (${cartItems.size} items)", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -101,7 +101,7 @@ fun CartScreen(
             EmptyStateView(
                 icon = Icons.Default.ShoppingCart,
                 title = "Your cart is empty",
-                description = "Explore products on the residence marketplace and add them to your cart.",
+                description = "Explore products on the residence marketplace and add them to your persistent cart.",
                 actionLabel = "Browse Marketplace",
                 onActionClick = onBack,
                 modifier = Modifier
@@ -143,13 +143,16 @@ fun CartScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "KSh ${"%,d".format(item.price)} × ${item.quantity}",
+                                    text = "KSh ${"%,d".format(item.price)} × ${item.quantity} = KSh ${"%,d".format(item.price * item.quantity)}",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = RoyalBlue
                                 )
                             }
-                            IconButton(onClick = { onRemoveItem(item.id.ifEmpty { item.product_id }) }) {
+
+                            IconButton(
+                                onClick = { onRemoveItem(item.id.ifEmpty { item.product_id }) }
+                            ) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove", tint = RoseOccupied)
                             }
                         }
@@ -157,44 +160,5 @@ fun CartScreen(
                 }
             }
         }
-    }
-
-    if (showCheckoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showCheckoutDialog = false },
-            title = { Text("Checkout & Seller Contact", fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text(
-                        "Capital Home Residence does not automatically deduct funds. Instead, communicate directly with the student sellers to confirm item pickup at the residence and make direct M-Pesa payments.",
-                        fontSize = 13.sp,
-                        color = Slate700
-                    )
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Text(
-                        "Total: KSh ${"%,d".format(totalAmount)}",
-                        fontWeight = FontWeight.Bold,
-                        color = RoyalBlue
-                    )
-                }
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showCheckoutDialog = false
-                        onClearCart()
-                        onBack()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue)
-                ) {
-                    Text("Confirm & Return")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCheckoutDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
     }
 }

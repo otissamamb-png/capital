@@ -69,17 +69,95 @@ data class MarketplaceProduct(
     val seller_name: String = "",
     val seller_phone: String = "",
     val category: String = "Electronics",
+    val subcategory: String = "",
     val name: String = "",
     val description: String = "",
     val price: Long = 0L,
+    val original_price: Long = 0L,
     val quantity: Long = 1L,
-    val condition: String = "New",
+    val condition: String = "New", // "New", "Like New", "Used", "Refurbished"
+    val brand: String = "",
+    val model: String = "",
+    val color: String = "",
+    val size: String = "",
+    val material: String = "",
+    val additional_specs: String = "",
     val location: String = "Capital Home Residence",
+    val delivery_option: String = "Pickup at Capital Home Residence",
     val image_url: String = "",
-    val status: String = "Active", // "Active", "Pending Approval", "Sold", "Hidden"
+    val image_urls: List<String> = emptyList(),
+    val status: String = "Active", // "Active", "Hidden", "Out of Stock", "Sold", "Deleted"
     val payment_method: String = "Send Money", // "Send Money", "Lipa na M-Pesa Pochi", "Lipa na M-Pesa Till", "Lipa M-Pesa Pay Bill"
     val payment_number: String = "",
     val payment_name: String = "",
+    val rating: Double = 4.8,
+    val review_count: Int = 12,
+    val created_at: Timestamp? = null,
+    val updated_at: Timestamp? = null
+) {
+    val discountPercent: Int
+        get() = if (original_price > price && original_price > 0L) {
+            (((original_price - price).toDouble() / original_price.toDouble()) * 100).toInt()
+        } else 0
+
+    val stockStatus: String
+        get() = when {
+            quantity <= 0L -> "Out of Stock"
+            quantity <= 3L -> "Low Stock"
+            else -> "In Stock"
+        }
+}
+
+data class ProductImage(
+    val id: String = "",
+    val product_id: String = "",
+    val image_url: String = "",
+    val display_order: Int = 0,
+    val is_cover: Boolean = false,
+    val created_at: Timestamp? = null
+)
+
+data class OrderRecord(
+    val id: String = "",
+    val order_number: String = "",
+    val buyer_id: String = "",
+    val buyer_name: String = "",
+    val buyer_phone: String = "",
+    val seller_id: String = "",
+    val seller_name: String = "",
+    val product_id: String = "",
+    val product_name: String = "",
+    val product_image: String = "",
+    val quantity: Long = 1L,
+    val unit_price: Long = 0L,
+    val total_amount: Long = 0L,
+    val order_status: String = "Pending Payment", // "Pending Payment", "Payment Verification", "Payment Confirmed", "Processing", "Ready for Pickup", "Completed", "Cancelled"
+    val payment_status: String = "Payment Pending", // "Payment Pending", "Reference Submitted", "Payment Under Review", "Payment Confirmed", "Payment Rejected", "Refund/Cancelled"
+    val payment_method: String = "Send Money",
+    val seller_payment_number: String = "",
+    val seller_payment_name: String = "",
+    val pickup_or_delivery: String = "Pickup at Capital Home Residence",
+    val mpesa_reference: String = "",
+    val rejection_reason: String = "",
+    val created_at: Timestamp? = null,
+    val updated_at: Timestamp? = null
+)
+
+data class PaymentRecord(
+    val id: String = "",
+    val order_id: String = "",
+    val order_number: String = "",
+    val buyer_id: String = "",
+    val seller_id: String = "",
+    val amount: Long = 0L,
+    val payment_method: String = "Send Money",
+    val seller_payment_details_snapshot: Map<String, String> = emptyMap(),
+    val payment_status: String = "Payment Pending", // "Payment Pending", "Reference Submitted", "Payment Under Review", "Payment Confirmed", "Payment Rejected"
+    val mpesa_reference: String = "",
+    val submitted_at: Timestamp? = null,
+    val verified_at: Timestamp? = null,
+    val verified_by: String = "",
+    val rejection_reason: String = "",
     val created_at: Timestamp? = null,
     val updated_at: Timestamp? = null
 )
