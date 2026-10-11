@@ -1,5 +1,7 @@
 package com.example.ui.components
 
+import android.util.Base64
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -9,19 +11,24 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import com.example.R
 import com.example.ui.theme.*
 
 @Composable
@@ -220,26 +227,81 @@ fun SafeImage(
     model: Any?,
     contentDescription: String?,
     modifier: Modifier = Modifier,
-    contentScale: ContentScale = ContentScale.Crop
+    contentScale: ContentScale = ContentScale.Crop,
+    fallbackIcon: ImageVector = Icons.Default.Apartment,
+    fallbackDrawableRes: Int? = null
 ) {
-    if (model != null && model.toString().isNotEmpty()) {
-        AsyncImage(
-            model = model,
+    val processedModel = remember(model) {
+        val str = model?.toString()?.trim() ?: ""
+        if (str.startsWith("data:image")) {
+            try {
+                val pure = str.substringAfter(",")
+                Base64.decode(pure, Base64.DEFAULT)
+            } catch (_: Exception) {
+                model
+            }
+        } else if (str.isNotEmpty() && !str.startsWith("http") && !str.startsWith("content") && !str.startsWith("file") && str.length > 50) {
+            try {
+                Base64.decode(str, Base64.DEFAULT)
+            } catch (_: Exception) {
+                model
+            }
+        } else {
+            model
+        }
+    }
+
+    val hasModel = when (processedModel) {
+        is ByteArray -> processedModel.isNotEmpty()
+        else -> processedModel?.toString()?.trim()?.isNotEmpty() == true
+    }
+
+    if (hasModel) {
+        SubcomposeAsyncImage(
+            model = processedModel,
             contentDescription = contentDescription,
             modifier = modifier,
-            contentScale = contentScale
+            contentScale = contentScale,
+            loading = {
+                Box(modifier = Modifier.fillMaxSize().background(Slate100), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = RoyalBlue, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                }
+            },
+            error = {
+                if (fallbackDrawableRes != null) {
+                    Image(
+                        painter = painterResource(id = fallbackDrawableRes),
+                        contentDescription = contentDescription,
+                        contentScale = contentScale,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(modifier = Modifier.fillMaxSize().background(Slate100), contentAlignment = Alignment.Center) {
+                        Icon(imageVector = fallbackIcon, contentDescription = contentDescription, tint = Slate400, modifier = Modifier.size(36.dp))
+                    }
+                }
+            }
         )
     } else {
-        Box(
-            modifier = modifier.background(Slate100),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Apartment,
+        if (fallbackDrawableRes != null) {
+            Image(
+                painter = painterResource(id = fallbackDrawableRes),
                 contentDescription = contentDescription,
-                tint = Slate400,
-                modifier = Modifier.size(36.dp)
+                contentScale = contentScale,
+                modifier = modifier
             )
+        } else {
+            Box(
+                modifier = modifier.background(Slate100),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = fallbackIcon,
+                    contentDescription = contentDescription,
+                    tint = Slate400,
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
     }
 }

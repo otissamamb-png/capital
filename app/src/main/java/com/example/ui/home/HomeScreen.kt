@@ -12,7 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.*
 import com.example.ui.components.RoomTypeBadge
+import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 
@@ -38,6 +39,7 @@ fun HomeScreen(
     rooms: List<RoomItem>,
     announcements: List<ResidenceAnnouncement>,
     products: List<MarketplaceProduct>,
+    activeOrders: List<OrderRecord> = emptyList(),
     unreadNotificationCount: Int,
     onNavigateToRooms: () -> Unit,
     onNavigateToMarketplace: () -> Unit,
@@ -47,16 +49,19 @@ fun HomeScreen(
     onProductClick: (MarketplaceProduct) -> Unit,
     onNotificationsClick: () -> Unit,
     onProfileClick: () -> Unit,
+    onTrackOrderClick: (OrderRecord) -> Unit = {},
+    onViewAllOrdersClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val availableRooms = rooms.filter { it.status.equals("Available", ignoreCase = true) }
     val occupiedRooms = rooms.filter { it.status.equals("Occupied", ignoreCase = true) }
     val totalRooms = rooms.size
+    val newestProducts = remember(products) { products.take(30) }
 
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
-            .background(Slate50)
+            .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = 16.dp),
         contentPadding = PaddingValues(top = 16.dp, bottom = 80.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp)
@@ -73,12 +78,12 @@ fun HomeScreen(
                         text = "Good morning, ${profile?.full_name?.split(" ")?.firstOrNull() ?: "Alex"}",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Slate900
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = "Welcome to Capital Home Residence",
                         fontSize = 13.sp,
-                        color = Slate500
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
@@ -115,12 +120,22 @@ fun HomeScreen(
                             .testTag("home_profile_avatar"),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = (profile?.full_name?.take(1) ?: "A").uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
+                        if (profile?.profile_photo?.isNotBlank() == true) {
+                            SafeImage(
+                                model = profile.profile_photo,
+                                contentDescription = "Profile Photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                fallbackIcon = Icons.Default.Person
+                            )
+                        } else {
+                            Text(
+                                text = (profile?.full_name?.take(1) ?: "A").uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                        }
                     }
                 }
             }
@@ -236,6 +251,126 @@ fun HomeScreen(
                             .testTag("action_community"),
                         onClick = onNavigateToCommunity
                     )
+                }
+            }
+        }
+
+        // Active Order Tracking Banner
+        if (activeOrders.isNotEmpty()) {
+            val latestActive = activeOrders.first()
+            item {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onTrackOrderClick(latestActive) }
+                        .testTag("home_active_order_tracking_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(30.dp)
+                                        .clip(CircleShape)
+                                        .background(BlueLight),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.ReceiptLong,
+                                        contentDescription = null,
+                                        tint = RoyalBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Order Tracking • #${latestActive.order_number}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.sp,
+                                    color = Slate900
+                                )
+                            }
+
+                            Surface(
+                                color = when {
+                                    latestActive.order_status == "Ready for Pickup" -> AmberLight
+                                    latestActive.payment_status == "Payment Confirmed" -> EmeraldLight
+                                    latestActive.payment_status == "Reference Submitted" -> BlueLight
+                                    else -> AmberLight
+                                },
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    text = when {
+                                        latestActive.order_status == "Ready for Pickup" -> "Ready for Pickup"
+                                        latestActive.payment_status == "Payment Confirmed" -> "Confirmed"
+                                        latestActive.payment_status == "Reference Submitted" -> "Verifying"
+                                        else -> "Pending Payment"
+                                    }.uppercase(),
+                                    color = when {
+                                        latestActive.order_status == "Ready for Pickup" -> AmberPending
+                                        latestActive.payment_status == "Payment Confirmed" -> EmeraldAvailable
+                                        latestActive.payment_status == "Reference Submitted" -> RoyalBlue
+                                        else -> AmberPending
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(52.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Slate100)
+                            ) {
+                                SafeImage(
+                                    model = latestActive.product_image,
+                                    contentDescription = latestActive.product_name,
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    fallbackIcon = Icons.Default.ShoppingBag
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = latestActive.product_name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = Slate900,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Sold by ${latestActive.seller_name} • KSh ${"%,d".format(latestActive.total_amount)}",
+                                    fontSize = 11.sp,
+                                    color = Slate500
+                                )
+                            }
+
+                            TextButton(onClick = { onTrackOrderClick(latestActive) }) {
+                                Text("Track →", color = RoyalBlue, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -395,8 +530,8 @@ fun HomeScreen(
             }
         }
 
-        // 7. Recent Marketplace Listings
-        if (products.isNotEmpty()) {
+        // 7. Recent Marketplace Listings (Newest 30 Products)
+        if (newestProducts.isNotEmpty()) {
             item {
                 Column {
                     Row(
@@ -404,26 +539,38 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Marketplace Highlights",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Slate900
-                        )
-                        TextButton(onClick = onNavigateToMarketplace) {
+                        Column {
                             Text(
-                                text = "Explore",
+                                text = "Newest Marketplace Products",
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Slate900
+                            )
+                            Text(
+                                text = "Showing newest ${newestProducts.size} listings from residents",
+                                fontSize = 11.sp,
+                                color = Slate500
+                            )
+                        }
+                        TextButton(
+                            onClick = onNavigateToMarketplace,
+                            modifier = Modifier.testTag("explore_all_products_button")
+                        ) {
+                            Text(
+                                text = "Explore All",
                                 color = RoyalBlue,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp
                             )
                         }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp)
+                        contentPadding = PaddingValues(vertical = 4.dp),
+                        modifier = Modifier.testTag("home_newest_products_row")
                     ) {
-                        items(products.take(4)) { prod ->
+                        items(newestProducts, key = { it.id }) { prod ->
                             HomeProductCard(
                                 product = prod,
                                 onClick = { onProductClick(prod) }
@@ -543,10 +690,11 @@ fun HomeRoomCard(
                     .fillMaxWidth()
                     .height(115.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.room_showcase_interior_1791459685558),
+                SafeImage(
+                    model = room.cover_image_url.ifEmpty { room.image_url },
                     contentDescription = "Room ${room.room_number}",
                     contentScale = ContentScale.Crop,
+                    fallbackDrawableRes = R.drawable.room_showcase_interior_1791459685558,
                     modifier = Modifier.fillMaxSize()
                 )
                 RoomTypeBadge(
@@ -615,11 +763,19 @@ fun HomeProductCard(
                     .background(Slate100),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.ShoppingBag,
-                    contentDescription = null,
-                    tint = RoyalBlue,
-                    modifier = Modifier.size(36.dp)
+                val icon = when (product.category.lowercase()) {
+                    "electronics", "phones" -> Icons.Default.Headphones
+                    "fashion", "shoes" -> Icons.Default.Checkroom
+                    "food" -> Icons.Default.Fastfood
+                    "books" -> Icons.Default.MenuBook
+                    else -> Icons.Default.ShoppingBag
+                }
+                SafeImage(
+                    model = product.image_url.ifEmpty { product.image_urls.firstOrNull() ?: "" },
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Crop,
+                    fallbackIcon = icon,
+                    modifier = Modifier.fillMaxSize()
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))

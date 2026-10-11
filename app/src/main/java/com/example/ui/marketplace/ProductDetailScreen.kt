@@ -34,6 +34,7 @@ import com.example.R
 import com.example.data.model.CartItemData
 import com.example.data.model.MarketplaceProduct
 import com.example.data.model.SavedItemData
+import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 
@@ -59,6 +60,16 @@ fun ProductDetailScreen(
         if (product.image_urls.isNotEmpty()) product.image_urls
         else if (product.image_url.isNotEmpty()) listOf(product.image_url)
         else emptyList()
+    }
+
+    val categoryIcon = remember(product.category) {
+        when (product.category.lowercase()) {
+            "electronics", "phones" -> Icons.Default.Headphones
+            "fashion", "shoes" -> Icons.Default.Checkroom
+            "food" -> Icons.Default.Fastfood
+            "books" -> Icons.Default.MenuBook
+            else -> Icons.Default.ShoppingBag
+        }
     }
 
     Scaffold(
@@ -116,7 +127,9 @@ fun ProductDetailScreen(
             Surface(
                 color = Color.White,
                 shadowElevation = 10.dp,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
             ) {
                 Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                     // Two prominent shopping action buttons right at the bottom
@@ -191,19 +204,14 @@ fun ProductDetailScreen(
                     .height(280.dp)
                     .background(Slate100)
             ) {
-                if (allImages.isNotEmpty()) {
-                    val currentImg = allImages.getOrNull(selectedImageIndex) ?: allImages.first()
-                    AsyncImage(
-                        model = currentImg,
-                        contentDescription = product.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Default.ShoppingBag, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(80.dp))
-                    }
-                }
+                val currentImg = allImages.getOrNull(selectedImageIndex) ?: allImages.firstOrNull() ?: product.image_url
+                SafeImage(
+                    model = currentImg,
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Crop,
+                    fallbackIcon = categoryIcon,
+                    modifier = Modifier.fillMaxSize()
+                )
 
                 // Discount Badge on image
                 if (product.discountPercent > 0) {
@@ -256,10 +264,11 @@ fun ProductDetailScreen(
                                 .border(if (selectedImageIndex == index) 2.dp else 1.dp, if (selectedImageIndex == index) RoyalBlue else Slate200, RoundedCornerShape(8.dp))
                                 .clickable { selectedImageIndex = index }
                         ) {
-                            AsyncImage(
+                            SafeImage(
                                 model = imgUrl,
                                 contentDescription = "Thumb $index",
                                 contentScale = ContentScale.Crop,
+                                fallbackIcon = categoryIcon,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

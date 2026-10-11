@@ -90,7 +90,7 @@ fun AddProductDialog(
                 inputStream?.close()
 
                 if (originalBitmap != null) {
-                    val maxDim = 800
+                    val maxDim = 500
                     val scale = if (originalBitmap.width > maxDim || originalBitmap.height > maxDim) {
                         maxDim.toFloat() / maxOf(originalBitmap.width, originalBitmap.height)
                     } else 1.0f
@@ -102,7 +102,7 @@ fun AddProductDialog(
                         true
                     )
                     val baos = ByteArrayOutputStream()
-                    scaled.compress(Bitmap.CompressFormat.JPEG, 75, baos)
+                    scaled.compress(Bitmap.CompressFormat.JPEG, 60, baos)
                     val base64 = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
                     if (imageList.size < 8) {
                         imageList.add(base64)

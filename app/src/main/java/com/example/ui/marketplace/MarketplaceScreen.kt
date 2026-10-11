@@ -29,6 +29,7 @@ import coil.compose.AsyncImage
 import com.example.data.model.MarketplaceProduct
 import com.example.data.model.SavedItemData
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.SafeImage
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -272,25 +273,20 @@ fun ProductGridCard(
                     .height(140.dp)
                     .background(Slate100)
             ) {
-                if (product.image_url.isNotEmpty()) {
-                    AsyncImage(
-                        model = product.image_url,
-                        contentDescription = product.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        val icon = when (product.category.lowercase()) {
-                            "electronics", "phones" -> Icons.Default.Headphones
-                            "fashion", "shoes" -> Icons.Default.Checkroom
-                            "food" -> Icons.Default.Fastfood
-                            "books" -> Icons.Default.MenuBook
-                            else -> Icons.Default.ShoppingBag
-                        }
-                        Icon(imageVector = icon, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(46.dp))
-                    }
+                val icon = when (product.category.lowercase()) {
+                    "electronics", "phones" -> Icons.Default.Headphones
+                    "fashion", "shoes" -> Icons.Default.Checkroom
+                    "food" -> Icons.Default.Fastfood
+                    "books" -> Icons.Default.MenuBook
+                    else -> Icons.Default.ShoppingBag
                 }
+                SafeImage(
+                    model = product.image_url.ifEmpty { product.image_urls.firstOrNull() ?: "" },
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Crop,
+                    fallbackIcon = icon,
+                    modifier = Modifier.fillMaxSize()
+                )
 
                 // Discount tag if original price > price
                 if (product.discountPercent > 0) {

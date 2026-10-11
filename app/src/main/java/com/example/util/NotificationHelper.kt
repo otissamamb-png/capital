@@ -62,4 +62,9 @@ object NotificationHelper {
 
         manager.notify(notificationId, builder.build())
     }
+
+    fun clearAllNotifications(context: Context) {
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        manager.cancelAll()
+    }
 }

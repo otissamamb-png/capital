@@ -30,6 +30,7 @@ import com.example.data.model.CommentItem
 import com.example.data.model.CommunityPost
 import com.example.data.model.UserProfile
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.SafeImage
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -41,10 +42,14 @@ fun CommunityScreen(
     onCreatePostClick: () -> Unit,
     onToggleLike: (String) -> Unit,
     onOpenComments: (CommunityPost) -> Unit,
+    onEditPost: (postId: String, newContent: String, newType: String) -> Unit = { _, _, _ -> },
+    onDeletePost: (postId: String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var selectedFilter by remember { mutableStateOf("All") }
+    var editingPost by remember { mutableStateOf<CommunityPost?>(null) }
+    var postToDelete by remember { mutableStateOf<CommunityPost?>(null) }
 
     val filteredPosts = remember(posts, selectedFilter) {
         if (selectedFilter == "All") posts
@@ -154,9 +159,15 @@ fun CommunityScreen(
                 }
             } else {
                 items(filteredPosts, key = { it.id }) { post ->
+                    val isMyPost = profile != null && (
+                        post.author_id == profile.auth_user_id ||
+                        post.author_id == profile.id ||
+                        (profile.full_name.isNotBlank() && post.author_name.equals(profile.full_name, ignoreCase = true))
+                    )
                     CommunityPostCard(
                         post = post,
                         isLiked = likedPostIds.contains(post.id),
+                        isMyPost = isMyPost,
                         onLikeClick = { onToggleLike(post.id) },
                         onCommentClick = { onOpenComments(post) },
                         onShareClick = {
@@ -169,10 +180,108 @@ fun CommunityScreen(
                                 type = "text/plain"
                             }
                             context.startActivity(Intent.createChooser(sendIntent, "Share Post"))
-                        }
+                        },
+                        onEditClick = { editingPost = post },
+                        onDeleteClick = { postToDelete = post }
                     )
                 }
             }
+        }
+
+        // Edit Post Dialog (Only for the user's own posts)
+        if (editingPost != null) {
+            var editedContent by remember(editingPost) { mutableStateOf(editingPost!!.content) }
+            var editedType by remember(editingPost) { mutableStateOf(editingPost!!.post_type) }
+            val categories = listOf("General", "Announcements", "Questions", "Marketplace")
+
+            AlertDialog(
+                onDismissRequest = { editingPost = null },
+                title = { Text("Edit Your Post", fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text("Category", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Slate700)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(categories) { cat ->
+                                val selected = editedType == cat
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { editedType = cat },
+                                    label = { Text(cat, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = RoyalBlue,
+                                        selectedLabelColor = Color.White
+                                    )
+                                )
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = editedContent,
+                            onValueChange = { editedContent = it },
+                            label = { Text("Post Content") },
+                            placeholder = { Text("What would you like to update?") },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 120.dp)
+                                .testTag("edit_post_content_input"),
+                            shape = RoundedCornerShape(12.dp)
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (editedContent.isNotBlank()) {
+                                onEditPost(editingPost!!.id, editedContent, editedType)
+                                editingPost = null
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("save_edited_post_button")
+                    ) {
+                        Text("Save Changes")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { editingPost = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
+        }
+
+        // Delete Post Confirmation Dialog
+        if (postToDelete != null) {
+            AlertDialog(
+                onDismissRequest = { postToDelete = null },
+                icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = RoseOccupied, modifier = Modifier.size(32.dp)) },
+                title = { Text("Delete Post", fontWeight = FontWeight.Bold) },
+                text = {
+                    Text("Are you sure you want to permanently delete this post? This action cannot be undone.")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            onDeletePost(postToDelete!!.id)
+                            postToDelete = null
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RoseOccupied),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("confirm_delete_post_button")
+                    ) {
+                        Text("Delete", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { postToDelete = null }) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
     }
 }
@@ -181,11 +290,16 @@ fun CommunityScreen(
 fun CommunityPostCard(
     post: CommunityPost,
     isLiked: Boolean,
+    isMyPost: Boolean = false,
     onLikeClick: () -> Unit,
     onCommentClick: () -> Unit,
     onShareClick: () -> Unit,
+    onEditClick: () -> Unit = {},
+    onDeleteClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+
     Card(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -205,21 +319,48 @@ fun CommunityPostCard(
                         .background(RoyalBlue),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = (post.author_name.take(1).ifEmpty { "R" }).uppercase(),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+                    if (post.author_photo.isNotBlank()) {
+                        SafeImage(
+                            model = post.author_photo,
+                            contentDescription = post.author_name,
+                            contentScale = ContentScale.Crop,
+                            fallbackIcon = Icons.Default.Person,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Text(
+                            text = (post.author_name.take(1).ifEmpty { "R" }).uppercase(),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = post.author_name.ifEmpty { "Resident" },
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Slate900
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = post.author_name.ifEmpty { "Resident" },
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Slate900
+                        )
+                        if (isMyPost) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Surface(
+                                color = BlueLight,
+                                shape = RoundedCornerShape(4.dp)
+                            ) {
+                                Text(
+                                    text = "You",
+                                    color = RoyalBlue,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+                    }
                     Text(
                         text = "Capital Home Resident",
                         fontSize = 11.sp,
@@ -241,6 +382,42 @@ fun CommunityPostCard(
                         )
                     }
                 }
+
+                // Show Edit/Delete menu ONLY for user's own posts
+                if (isMyPost) {
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Box {
+                        IconButton(
+                            onClick = { showMenu = true },
+                            modifier = Modifier.size(32.dp).testTag("post_options_${post.id}")
+                        ) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Post options", tint = Slate500, modifier = Modifier.size(20.dp))
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Edit Post") },
+                                onClick = {
+                                    showMenu = false
+                                    onEditClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(18.dp)) },
+                                modifier = Modifier.testTag("edit_post_item_${post.id}")
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Delete Post", color = RoseOccupied) },
+                                onClick = {
+                                    showMenu = false
+                                    onDeleteClick()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = RoseOccupied, modifier = Modifier.size(18.dp)) },
+                                modifier = Modifier.testTag("delete_post_item_${post.id}")
+                            )
+                        }
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -260,12 +437,43 @@ fun CommunityPostCard(
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth().height(160.dp)
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.hero_residence_banner_1791459672502),
+                    SafeImage(
+                        model = if (post.image_url.isNotEmpty()) post.image_url else R.drawable.hero_residence_banner_1791459672502,
                         contentDescription = "Post image",
                         contentScale = ContentScale.Crop,
+                        fallbackDrawableRes = R.drawable.hero_residence_banner_1791459672502,
                         modifier = Modifier.fillMaxSize()
                     )
+                }
+            }
+
+            // Optional Video
+            if (post.video_url.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Card(
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E8FF)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF7E22CE)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = "Play Video", tint = Color.White, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Video Attachment", fontWeight = FontWeight.Bold, color = Color(0xFF7E22CE), fontSize = 13.sp)
+                            Text("Attached video (under 5MB)", color = Slate500, fontSize = 11.sp)
+                        }
+                    }
                 }
             }
 

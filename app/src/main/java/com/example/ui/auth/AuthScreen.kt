@@ -53,18 +53,22 @@ fun AuthScreen(
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { ResidenceRepository.create(context) }
 
-    // Navigation state inside Auth: "welcome", "login", "signup", "admin_login"
+    // Navigation state inside Auth: "welcome", "login", "signup", "verify_code", "new_password"
     var authMode by remember { mutableStateOf("welcome") }
 
     // Login Form State
     var loginEmail by remember { mutableStateOf("") }
     var loginPassword by remember { mutableStateOf("") }
     var loginPasswordVisible by remember { mutableStateOf(false) }
+    var isPasswordInvalid by remember { mutableStateOf(false) }
 
-    // Admin Login Form State
-    var adminEmail by remember { mutableStateOf("") }
-    var adminPassword by remember { mutableStateOf("") }
-    var adminPasswordVisible by remember { mutableStateOf(false) }
+    // Forgot Password & Verification State (Email remains persistent)
+    var forgotEmail by remember { mutableStateOf("") }
+    var verificationCodeInput by remember { mutableStateOf("") }
+    var generatedVerificationCode by remember { mutableStateOf<String?>(null) }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmNewPassword by remember { mutableStateOf("") }
+    var newPasswordVisible by remember { mutableStateOf(false) }
 
     // Signup Multi-Step Form State
     var signupStep by remember { mutableStateOf(1) } // 1: Personal, 2: Residence, 3: Room Image
@@ -287,22 +291,7 @@ fun AuthScreen(
                         Text("I already have an account", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = RoyalBlue)
                     }
 
-                    Spacer(modifier = Modifier.height(32.dp))
-
-                    // Discreet Admin Portal Link
-                    TextButton(
-                        onClick = {
-                            errorMessage = null
-                            authMode = "admin_login"
-                        },
-                        modifier = Modifier.testTag("admin_portal_link")
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Shield, contentDescription = null, tint = Slate400, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Administrator Portal", color = Slate500, fontSize = 12.sp)
-                        }
-                    }
+                    Spacer(modifier = Modifier.height(24.dp))
                 }
 
                 // ==========================================
@@ -361,7 +350,85 @@ fun AuthScreen(
                         shape = RoundedCornerShape(12.dp)
                     )
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    // Forgot Password link right below password field
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                if (loginEmail.isBlank()) {
+                                    errorMessage = "Please enter your email address to receive a verification code."
+                                } else {
+                                    errorMessage = null
+                                    isLoading = true
+                                    coroutineScope.launch {
+                                        val result = repository.sendPasswordResetVerificationCode(loginEmail)
+                                        isLoading = false
+                                        if (result.isSuccess) {
+                                            forgotEmail = loginEmail.trim().lowercase()
+                                            generatedVerificationCode = result.getOrNull()
+                                            verificationCodeInput = ""
+                                            authMode = "verify_code"
+                                        } else {
+                                            errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to send reset code."
+                                        }
+                                    }
+                                }
+                            },
+                            modifier = Modifier.testTag("login_forgot_password_link")
+                        ) {
+                            Text("Forgot Password?", color = RoyalBlue, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (isPasswordInvalid) {
+                        Surface(
+                            color = AmberLight,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 6.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("Forgot your password?", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Slate900)
+                                    Text("Send a 6-digit code to $loginEmail to reset it.", fontSize = 11.sp, color = Slate600)
+                                }
+                                Button(
+                                    onClick = {
+                                        isLoading = true
+                                        coroutineScope.launch {
+                                            val result = repository.sendPasswordResetVerificationCode(loginEmail)
+                                            isLoading = false
+                                            if (result.isSuccess) {
+                                                forgotEmail = loginEmail.trim().lowercase()
+                                                generatedVerificationCode = result.getOrNull()
+                                                verificationCodeInput = ""
+                                                authMode = "verify_code"
+                                            } else {
+                                                errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to send reset code."
+                                            }
+                                        }
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                    modifier = Modifier.height(32.dp).testTag("send_code_invalid_pw_button")
+                                ) {
+                                    Text("Send Code", fontSize = 11.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     Button(
                         onClick = {
@@ -375,9 +442,14 @@ fun AuthScreen(
                                 val result = repository.signInWithEmailPassword(loginEmail, loginPassword)
                                 isLoading = false
                                 if (result.isSuccess) {
+                                    isPasswordInvalid = false
                                     onAuthSuccess()
                                 } else {
-                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Invalid login credentials."
+                                    val err = result.exceptionOrNull()?.localizedMessage ?: "Invalid login credentials."
+                                    errorMessage = err
+                                    if (err.contains("password", ignoreCase = true)) {
+                                        isPasswordInvalid = true
+                                    }
                                 }
                             }
                         },
@@ -549,14 +621,32 @@ fun AuthScreen(
                                         errorMessage = "Passwords do not match."
                                         return@Button
                                     }
+                                    if (!email.contains("@") || !email.contains(".")) {
+                                        errorMessage = "Please enter a valid email address."
+                                        return@Button
+                                    }
+                                    isLoading = true
                                     errorMessage = null
-                                    signupStep = 2
+                                    coroutineScope.launch {
+                                        val isTaken = repository.isEmailRegistered(email)
+                                        isLoading = false
+                                        if (isTaken) {
+                                            errorMessage = "An account with email $email is already registered. Each resident must use a unique email address."
+                                        } else {
+                                            signupStep = 2
+                                        }
+                                    }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
                                 shape = RoundedCornerShape(14.dp),
+                                enabled = !isLoading,
                                 modifier = Modifier.fillMaxWidth().height(50.dp).testTag("signup_step1_continue")
                             ) {
-                                Text("Continue: Residence Details", fontWeight = FontWeight.Bold)
+                                if (isLoading) {
+                                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                                } else {
+                                    Text("Continue: Residence Details", fontWeight = FontWeight.Bold)
+                                }
                             }
                         }
 
@@ -825,9 +915,9 @@ fun AuthScreen(
                 }
 
                 // ==========================================
-                // 4. SECURE ADMINISTRATOR LOGIN PORTAL
+                // 4. VERIFY 6-DIGIT CODE (Forgot Password)
                 // ==========================================
-                "admin_login" -> {
+                "verify_code" -> {
                     Surface(
                         color = NavyDark,
                         shape = RoundedCornerShape(16.dp),
@@ -837,41 +927,226 @@ fun AuthScreen(
                             modifier = Modifier.padding(20.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Icon(Icons.Default.Security, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                            Icon(Icons.Default.MarkEmailRead, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text("Administrator Portal", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                            Text("Secure administrative access only", color = Slate400, fontSize = 12.sp)
+                            Text("Verification Code", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("Enter the 6-digit code sent to your email", color = Slate400, fontSize = 12.sp)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Persistent Email Banner
+                    Surface(
+                        color = BlueSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Email, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Verifying Account Email", fontSize = 11.sp, color = Slate500)
+                                Text(forgotEmail, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = RoyalBlue)
+                            }
+                        }
+                    }
+
+                    if (generatedVerificationCode != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            color = EmeraldLight,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldAvailable, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Code sent: $generatedVerificationCode (Check your notification drawer)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = EmeraldAvailable
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
 
                     OutlinedTextField(
-                        value = adminEmail,
-                        onValueChange = { adminEmail = it },
-                        label = { Text("Admin Email") },
-                        placeholder = { Text("okindatechhub@gmail.com") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        value = verificationCodeInput,
+                        onValueChange = {
+                            if (it.length <= 6 && it.all { char -> char.isDigit() }) {
+                                verificationCodeInput = it
+                            }
+                        },
+                        label = { Text("6-Digit Verification Code") },
+                        placeholder = { Text("e.g. 123456") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("admin_email_input"),
+                        modifier = Modifier.fillMaxWidth().testTag("verification_code_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(22.dp))
+
+                    Button(
+                        onClick = {
+                            if (verificationCodeInput.length != 6) {
+                                errorMessage = "Please enter the full 6-digit verification code."
+                                return@Button
+                            }
+                            isLoading = true
+                            errorMessage = null
+                            coroutineScope.launch {
+                                val result = repository.verifyPasswordResetCode(forgotEmail, verificationCodeInput)
+                                isLoading = false
+                                if (result.isSuccess) {
+                                    authMode = "new_password"
+                                } else {
+                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Invalid verification code."
+                                }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                        shape = RoundedCornerShape(14.dp),
+                        enabled = !isLoading && verificationCodeInput.length == 6,
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("verify_code_submit_button")
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
+                        } else {
+                            Text("Verify Code", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    TextButton(
+                        onClick = {
+                            isLoading = true
+                            errorMessage = null
+                            coroutineScope.launch {
+                                val result = repository.sendPasswordResetVerificationCode(forgotEmail)
+                                isLoading = false
+                                if (result.isSuccess) {
+                                    generatedVerificationCode = result.getOrNull()
+                                } else {
+                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to resend verification code."
+                                }
+                            }
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier.testTag("resend_code_button")
+                    ) {
+                        Text("Resend 6-Digit Code", color = RoyalBlue, fontSize = 13.sp)
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // Requirement: The verification page persists until user enters verification or creates a new account
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Need a fresh account?", fontSize = 13.sp, color = Slate500)
+                        TextButton(
+                            onClick = {
+                                errorMessage = null
+                                authMode = "signup"
+                                signupStep = 1
+                            },
+                            modifier = Modifier.testTag("verify_create_account_link")
+                        ) {
+                            Text("Create a new account", color = RoyalBlue, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                    }
+
+                    TextButton(onClick = {
+                        errorMessage = null
+                        authMode = "login"
+                    }) {
+                        Text("Return to Sign In", color = Slate500, fontSize = 12.sp)
+                    }
+                }
+
+                // ==========================================
+                // 5. ENTER NEW PASSWORD & GO TO HOMEPAGE
+                // ==========================================
+                "new_password" -> {
+                    Surface(
+                        color = RoyalBlue,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(Icons.Default.LockReset, contentDescription = null, tint = Color.White, modifier = Modifier.size(36.dp))
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text("Set New Password", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                            Text("Create a secure new password for your account", color = Slate200, fontSize = 12.sp)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // Persistent Email Banner
+                    Surface(
+                        color = BlueSurface,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.AccountCircle, contentDescription = null, tint = RoyalBlue, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text("Persistent Account Email", fontSize = 11.sp, color = Slate500)
+                                Text(forgotEmail, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = newPassword,
+                        onValueChange = { newPassword = it },
+                        label = { Text("New Password") },
+                        visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
+                                Icon(if (newPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null)
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().testTag("new_password_input"),
                         shape = RoundedCornerShape(12.dp)
                     )
 
                     Spacer(modifier = Modifier.height(14.dp))
 
                     OutlinedTextField(
-                        value = adminPassword,
-                        onValueChange = { adminPassword = it },
-                        label = { Text("Admin Password") },
-                        visualTransformation = if (adminPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
-                            IconButton(onClick = { adminPasswordVisible = !adminPasswordVisible }) {
-                                Icon(if (adminPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, contentDescription = null)
-                            }
-                        },
+                        value = confirmNewPassword,
+                        onValueChange = { confirmNewPassword = it },
+                        label = { Text("Confirm New Password") },
+                        visualTransformation = if (newPasswordVisible) VisualTransformation.None else PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().testTag("admin_password_input"),
+                        modifier = Modifier.fillMaxWidth().testTag("confirm_new_password_input"),
                         shape = RoundedCornerShape(12.dp)
                     )
 
@@ -879,41 +1154,45 @@ fun AuthScreen(
 
                     Button(
                         onClick = {
-                            if (adminEmail.isBlank() || adminPassword.isBlank()) {
-                                errorMessage = "Please enter administrator credentials."
+                            if (newPassword.length < 6) {
+                                errorMessage = "New password must be at least 6 characters."
+                                return@Button
+                            }
+                            if (newPassword != confirmNewPassword) {
+                                errorMessage = "Passwords do not match."
                                 return@Button
                             }
                             isLoading = true
                             errorMessage = null
                             coroutineScope.launch {
-                                val result = repository.signInAdmin(adminEmail, adminPassword)
+                                val result = repository.resetPasswordAndSignIn(forgotEmail, newPassword)
                                 isLoading = false
                                 if (result.isSuccess) {
-                                    onAuthSuccess()
+                                    onAuthSuccess() // Automatically redirects to homepage
                                 } else {
-                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Administrative authentication failed."
+                                    errorMessage = result.exceptionOrNull()?.localizedMessage ?: "Failed to reset password."
                                 }
                             }
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = NavyDark),
+                        colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
                         shape = RoundedCornerShape(14.dp),
                         enabled = !isLoading,
-                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("admin_login_submit_button")
+                        modifier = Modifier.fillMaxWidth().height(52.dp).testTag("save_new_password_button")
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(24.dp))
                         } else {
-                            Text("Authenticate Administrator", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                            Text("Update Password & Continue to Homepage", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
                     TextButton(onClick = {
                         errorMessage = null
-                        authMode = "welcome"
+                        authMode = "login"
                     }) {
-                        Text("Return to Student Portal", color = Slate500, fontSize = 13.sp)
+                        Text("Return to Sign In", color = Slate500, fontSize = 12.sp)
                     }
                 }
             }

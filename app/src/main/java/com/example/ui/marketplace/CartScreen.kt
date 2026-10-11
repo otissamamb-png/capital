@@ -63,7 +63,9 @@ fun CartScreen(
                 Surface(
                     color = Color.White,
                     shadowElevation = 8.dp,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(

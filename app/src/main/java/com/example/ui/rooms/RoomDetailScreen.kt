@@ -30,6 +30,7 @@ import com.example.R
 import com.example.data.model.RoomItem
 import com.example.data.model.SavedItemData
 import com.example.ui.components.RoomTypeBadge
+import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 
@@ -101,7 +102,9 @@ fun RoomDetailScreen(
             Surface(
                 color = Color.White,
                 shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Button(
@@ -139,10 +142,11 @@ fun RoomDetailScreen(
                     .fillMaxWidth()
                     .height(240.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.room_showcase_interior_1791459685558),
+                SafeImage(
+                    model = room.cover_image_url.ifEmpty { room.image_url },
                     contentDescription = "Room ${room.room_number}",
                     contentScale = ContentScale.Crop,
+                    fallbackDrawableRes = R.drawable.room_showcase_interior_1791459685558,
                     modifier = Modifier.fillMaxSize()
                 )
                 Surface(

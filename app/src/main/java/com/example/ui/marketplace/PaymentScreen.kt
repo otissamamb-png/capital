@@ -35,6 +35,8 @@ import com.example.ui.theme.*
 fun PaymentScreen(
     order: OrderRecord,
     onSubmitReference: (String) -> Unit,
+    onCancelPayment: () -> Unit = {},
+    onReturnToMarketplace: () -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -44,6 +46,8 @@ fun PaymentScreen(
     var copiedNotice by remember { mutableStateOf(false) }
     var isSubmitting by remember { mutableStateOf(false) }
     var errorMsg by remember { mutableStateOf<String?>(null) }
+    var showSuccessConfirmationDialog by remember { mutableStateOf(false) }
+    var showCancelConfirmDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -52,6 +56,14 @@ fun PaymentScreen(
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("payment_back_button")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    TextButton(
+                        onClick = { showCancelConfirmDialog = true },
+                        modifier = Modifier.testTag("payment_cancel_top_button")
+                    ) {
+                        Text("Cancel", color = RoseOccupied, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
@@ -80,15 +92,15 @@ fun PaymentScreen(
                 ) {
                     Icon(Icons.Default.HourglassTop, contentDescription = null, tint = AmberPending)
                     Spacer(modifier = Modifier.width(10.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Unfinished Payment Restored",
+                            text = "Awaiting M-Pesa Payment",
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp,
                             color = Slate900
                         )
                         Text(
-                            text = "Order #${order.order_number} is reserved. Complete payment below without restarting.",
+                            text = "Order #${order.order_number} is reserved. Complete payment below or cancel if you wish to withdraw.",
                             fontSize = 11.sp,
                             color = Slate700
                         )
@@ -318,6 +330,7 @@ fun PaymentScreen(
                             errorMsg = null
                             onSubmitReference(mpesaCode.trim().uppercase())
                             isSubmitting = false
+                            showSuccessConfirmationDialog = true
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
                         shape = RoundedCornerShape(12.dp),
@@ -334,6 +347,23 @@ fun PaymentScreen(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedButton(
+                        onClick = { showCancelConfirmDialog = true },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = RoseOccupied),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, RoseOccupied.copy(alpha = 0.5f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("payment_cancel_order_button")
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp), tint = RoseOccupied)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Cancel Payment & Order", fontWeight = FontWeight.Bold, color = RoseOccupied)
+                    }
+
                     Text(
                         text = "Submitting updates the status to 'Reference Submitted'. The seller will manually verify the funds in M-Pesa.",
                         fontSize = 11.sp,
@@ -344,5 +374,106 @@ fun PaymentScreen(
                 }
             }
         }
+    }
+
+    if (showCancelConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Cancel,
+                    contentDescription = "Cancel Payment",
+                    tint = RoseOccupied,
+                    modifier = Modifier.size(44.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Cancel this Payment?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Are you sure you want to cancel the payment for Order #${order.order_number}? This will cancel your order reservation and release the item so you won't be prompted to pay again.",
+                    fontSize = 13.sp,
+                    color = Slate600,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showCancelConfirmDialog = false
+                        onCancelPayment()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoseOccupied),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_cancel_payment_button")
+                ) {
+                    Text("Yes, Cancel Order", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showCancelConfirmDialog = false },
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Keep Order")
+                }
+            }
+        )
+    }
+
+    if (showSuccessConfirmationDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showSuccessConfirmationDialog = false
+                onReturnToMarketplace()
+            },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.CheckCircle,
+                    contentDescription = "Success",
+                    tint = EmeraldAvailable,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Successfully Submitted",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Your payment reference has been successfully submitted for confirmation. You will receive notifications as the seller verifies payment, makes the product ready for pickup, and completes your order.",
+                    fontSize = 13.sp,
+                    color = Slate600,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 18.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSuccessConfirmationDialog = false
+                        onReturnToMarketplace()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("payment_success_ok_button")
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+            }
+        )
     }
 }

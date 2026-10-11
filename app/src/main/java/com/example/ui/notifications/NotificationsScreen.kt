@@ -30,11 +30,13 @@ import com.example.ui.theme.*
 fun NotificationsScreen(
     notifications: List<NotificationItem>,
     onMarkRead: (String) -> Unit,
+    onTrackOrder: (String) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     BackHandler { onBack() }
     var selectedTab by remember { mutableStateOf("All") } // "All", "Unread"
+    var selectedNotification by remember { mutableStateOf<NotificationItem?>(null) }
 
     val displayNotifications = remember(notifications, selectedTab) {
         if (selectedTab == "Unread") notifications.filter { !it.is_read }
@@ -105,12 +107,118 @@ fun NotificationsScreen(
                     items(displayNotifications, key = { it.id }) { notif ->
                         NotificationCard(
                             item = notif,
-                            onClick = { onMarkRead(notif.id) }
+                            onClick = {
+                                selectedNotification = notif
+                                if (!notif.is_read) {
+                                    onMarkRead(notif.id)
+                                }
+                            }
                         )
                     }
                 }
             }
         }
+    }
+
+    // Notification Details Dialog
+    if (selectedNotification != null) {
+        val notif = selectedNotification!!
+        val (icon, tint, bg) = when (notif.notification_type) {
+            "vacancy" -> Triple(Icons.Default.Apartment, RoyalBlue, BlueLight)
+            "product", "marketplace", "order" -> Triple(Icons.Default.Storefront, EmeraldAvailable, EmeraldLight)
+            "community" -> Triple(Icons.Default.Forum, Color(0xFF7E22CE), Color(0xFFF3E8FF))
+            else -> Triple(Icons.Default.Campaign, RoyalBlue, BlueLight)
+        }
+
+        AlertDialog(
+            onDismissRequest = { selectedNotification = null },
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(bg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(26.dp))
+                }
+            },
+            title = {
+                Text(
+                    text = notif.title,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp,
+                    color = Slate900
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Surface(
+                        color = Slate100,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = notif.message,
+                            fontSize = 14.sp,
+                            color = Slate800,
+                            lineHeight = 20.sp,
+                            modifier = Modifier.padding(12.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = EmeraldLight,
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = "✓ Marked as Read",
+                                color = EmeraldAvailable,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                        Text(
+                            text = notif.notification_type.replaceFirstChar { it.uppercase() },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Slate500
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { selectedNotification = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                if (notif.notification_type == "order" && notif.reference_id.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = {
+                            val refId = notif.reference_id
+                            selectedNotification = null
+                            onTrackOrder(refId)
+                        },
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Track Order")
+                    }
+                }
+            }
+        )
     }
 }
 

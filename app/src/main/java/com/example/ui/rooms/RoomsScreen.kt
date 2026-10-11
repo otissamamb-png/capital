@@ -26,6 +26,7 @@ import com.example.R
 import com.example.data.model.RoomItem
 import com.example.ui.components.EmptyStateView
 import com.example.ui.components.RoomTypeBadge
+import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 
@@ -243,21 +244,13 @@ fun RoomListCard(
                     .height(150.dp)
                     .background(Slate100)
             ) {
-                if (room.cover_image_url.isNotEmpty()) {
-                    coil.compose.AsyncImage(
-                        model = room.cover_image_url,
-                        contentDescription = "Room ${room.room_number}",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(id = R.drawable.room_showcase_interior_1791459685558),
-                        contentDescription = "Room ${room.room_number}",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
+                SafeImage(
+                    model = room.cover_image_url.ifEmpty { room.image_url },
+                    contentDescription = "Room ${room.room_number}",
+                    contentScale = ContentScale.Crop,
+                    fallbackDrawableRes = R.drawable.room_showcase_interior_1791459685558,
+                    modifier = Modifier.fillMaxSize()
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

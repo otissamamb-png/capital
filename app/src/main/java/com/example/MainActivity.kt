@@ -2,8 +2,10 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -66,6 +68,23 @@ fun CapitalHomeApp() {
     val repository = remember { ResidenceRepository.create(context) }
     var currentSessionUser by remember { mutableStateOf(repository.getCurrentSessionUser()) }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { _ -> }
+
+    LaunchedEffect(Unit) {
+        com.example.util.NotificationHelper.clearAllNotifications(context)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(
+                    context,
+                    android.Manifest.permission.POST_NOTIFICATIONS
+                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
             if (auth.currentUser != null && currentSessionUser == null) {
@@ -94,6 +113,7 @@ fun CapitalHomeApp() {
             userId = currentSessionUser!!.id,
             userEmail = currentSessionUser!!.email.ifBlank { "alex@capitalhome.co.ke" },
             userName = currentSessionUser!!.name.ifBlank { "Alex Kimani" },
+            userRole = currentSessionUser!!.role,
             onSignOut = {
                 repository.signOut()
                 currentSessionUser = null
@@ -107,6 +127,7 @@ fun MainResidenceContent(
     userId: String,
     userEmail: String,
     userName: String,
+    userRole: String = "resident",
     onSignOut: () -> Unit
 ) {
     val context = LocalContext.current
@@ -134,9 +155,11 @@ fun MainResidenceContent(
     val buyerOrders by repository.observeBuyerOrders(userId).collectAsStateWithLifecycle(initialValue = emptyList())
     val sellerOrders by repository.observeSellerOrders(userId).collectAsStateWithLifecycle(initialValue = emptyList())
     val allOrders by repository.observeAllOrders().collectAsStateWithLifecycle(initialValue = emptyList())
+    val allUsers by repository.observeAllUsers().collectAsStateWithLifecycle(initialValue = emptyList())
 
-    // Ensure profile is created in database if not present
+    // Ensure profile is created in database if not present and register FCM token
     LaunchedEffect(userId) {
+        com.example.service.CapitalHomeFirebaseMessagingService.registerCurrentToken(userId)
         val existing = repository.getProfileOnce(userId)
         if (existing == null) {
             val session = repository.getCurrentSessionUser()
@@ -146,14 +169,25 @@ fun MainResidenceContent(
                 email = session?.email ?: userEmail,
                 phone = session?.phone ?: "+254 712 345 678",
                 room_id = session?.roomId ?: "",
-                role = session?.role ?: "resident"
+                role = session?.role ?: userRole
             )
             repository.saveProfile(defaultProf)
         }
     }
 
-    // Navigation Tab state
-    var selectedTab by remember { mutableStateOf(0) } // 0: Home, 1: Rooms, 2: Marketplace, 3: Chats, 4: Profile
+    // Navigation Tab state (Default to 0: Home for normal users)
+    var selectedTab by remember { mutableStateOf(0) } // 0: Home, 1: Rooms, 2: Marketplace, 3: Posts, 4: Chats, 5: Profile
+
+    // Sub-screen states: Admin automatically redirected to Admin Dashboard on login, normal users to Home
+    var showAdminDashboardScreen by remember(userId, userRole) {
+        mutableStateOf(userRole == "admin")
+    }
+
+    LaunchedEffect(profile?.role) {
+        if (profile?.role == "admin" && !showAdminDashboardScreen) {
+            showAdminDashboardScreen = true
+        }
+    }
 
     // Sub-screen states
     var selectedRoom by remember { mutableStateOf<RoomItem?>(null) }
@@ -167,20 +201,10 @@ fun MainResidenceContent(
     var showSavedItemsScreen by remember { mutableStateOf(false) }
     var showSellerAppScreen by remember { mutableStateOf(false) }
     var showAddProductDialog by remember { mutableStateOf(false) }
-    var showAdminDashboardScreen by remember { mutableStateOf(false) }
     var showSellerDashboardScreen by remember { mutableStateOf(false) }
     var showOrdersScreen by remember { mutableStateOf(false) }
     var activePaymentOrder by remember { mutableStateOf<OrderRecord?>(null) }
-
-    // Automatic restoration of unfinished payments (Requirement 18 & 24)
-    LaunchedEffect(buyerOrders) {
-        if (activePaymentOrder == null) {
-            val pendingOrder = buyerOrders.firstOrNull { it.payment_status == "Payment Pending" }
-            if (pendingOrder != null) {
-                activePaymentOrder = pendingOrder
-            }
-        }
-    }
+    var trackingOrderId by remember { mutableStateOf<String?>(null) }
 
     // Comments for active post dialog
     val activeComments by remember(commentsPost) {
@@ -329,6 +353,19 @@ fun MainResidenceContent(
                         )
                     }
                 },
+                onCancelPayment = {
+                    val orderToCancel = activePaymentOrder
+                    activePaymentOrder = null
+                    if (orderToCancel != null) {
+                        coroutineScope.launch {
+                            repository.cancelOrder(orderToCancel.id)
+                        }
+                    }
+                },
+                onReturnToMarketplace = {
+                    activePaymentOrder = null
+                    selectedTab = 2 // Marketplace tab
+                },
                 onBack = { activePaymentOrder = null }
             )
         }
@@ -336,12 +373,42 @@ fun MainResidenceContent(
         showOrdersScreen -> {
             OrderTrackingScreen(
                 orders = buyerOrders,
-                onOrderClick = { order ->
-                    if (order.payment_status == "Payment Pending" || order.payment_status == "Reference Submitted") {
-                        activePaymentOrder = order
+                initialOrderId = trackingOrderId,
+                onPayOrder = { order ->
+                    activePaymentOrder = order
+                },
+                onCancelOrder = { orderId ->
+                    coroutineScope.launch {
+                        repository.cancelOrder(orderId)
                     }
                 },
-                onBack = { showOrdersScreen = false }
+                onConfirmReceived = { orderId ->
+                    coroutineScope.launch {
+                        repository.updateOrderStatus(orderId, "Completed")
+                    }
+                },
+                onChatWithSeller = { sellerId, sellerName ->
+                    coroutineScope.launch {
+                        val result = repository.startOrGetConversation(
+                            targetUserId = sellerId,
+                            targetUserName = sellerName,
+                            type = "Direct"
+                        )
+                        val convId = result.getOrNull() ?: if (userId < sellerId) "conv_${userId}_${sellerId}" else "conv_${sellerId}_${userId}"
+                        selectedConversation = ConversationItem(
+                            id = convId,
+                            member_ids = listOf(userId, sellerId),
+                            other_user_id = sellerId,
+                            other_user_name = sellerName,
+                            updated_at = com.google.firebase.Timestamp.now()
+                        )
+                        showOrdersScreen = false
+                    }
+                },
+                onBack = {
+                    showOrdersScreen = false
+                    trackingOrderId = null
+                }
             )
         }
 
@@ -358,6 +425,16 @@ fun MainResidenceContent(
                 onUpdateOrderStatus = { orderId, newStatus ->
                     coroutineScope.launch {
                         repository.updateOrderStatus(orderId, newStatus)
+                    }
+                },
+                onEditProduct = { updated ->
+                    coroutineScope.launch {
+                        repository.updateProduct(updated)
+                    }
+                },
+                onDeleteProduct = { productId ->
+                    coroutineScope.launch {
+                        repository.deleteProduct(productId)
                     }
                 },
                 onBack = { showSellerDashboardScreen = false }
@@ -400,10 +477,18 @@ fun MainResidenceContent(
         }
 
         showNotificationsScreen -> {
+            LaunchedEffect(Unit) {
+                repository.markAllNotificationsRead(userId)
+            }
             NotificationsScreen(
                 notifications = notifications,
                 onMarkRead = { id ->
                     coroutineScope.launch { repository.markNotificationRead(id) }
+                },
+                onTrackOrder = { orderId ->
+                    trackingOrderId = orderId
+                    showOrdersScreen = true
+                    showNotificationsScreen = false
                 },
                 onBack = { showNotificationsScreen = false }
             )
@@ -438,6 +523,7 @@ fun MainResidenceContent(
                 orders = allOrders,
                 vacancies = vacancies,
                 announcements = announcements,
+                users = allUsers,
                 onReviewSeller = { targetUserId, approve ->
                     coroutineScope.launch { repository.reviewSellerApplication(targetUserId, approve) }
                 },
@@ -455,6 +541,16 @@ fun MainResidenceContent(
                     coroutineScope.launch {
                         val newStatus = if (room.status == "Available") "Occupied" else "Available"
                         repository.updateRoomStatus(room.id, newStatus)
+                    }
+                },
+                onToggleRoomReadyToBook = { roomId, ready ->
+                    coroutineScope.launch {
+                        repository.toggleRoomReadyToBook(roomId, ready)
+                    }
+                },
+                onDeleteUser = { targetUserId ->
+                    coroutineScope.launch {
+                        repository.deleteUser(targetUserId)
                     }
                 },
                 onCreateAnnouncement = { title, content ->
@@ -518,6 +614,20 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
+                            icon = { Icon(Icons.Default.DynamicFeed, contentDescription = "Posts") },
+                            label = { Text("Posts", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = RoyalBlue,
+                                selectedTextColor = RoyalBlue,
+                                unselectedIconColor = Slate400,
+                                unselectedTextColor = Slate400,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                            ),
+                            modifier = Modifier.testTag("nav_item_posts")
+                        )
+                        NavigationBarItem(
+                            selected = selectedTab == 4,
+                            onClick = { selectedTab = 4 },
                             icon = {
                                 BadgedBox(
                                     badge = {
@@ -530,7 +640,7 @@ fun MainResidenceContent(
                                     Icon(Icons.Default.Chat, contentDescription = "Chats")
                                 }
                             },
-                            label = { Text("Chats", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Chats", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -541,10 +651,10 @@ fun MainResidenceContent(
                             modifier = Modifier.testTag("nav_item_chats")
                         )
                         NavigationBarItem(
-                            selected = selectedTab == 4,
-                            onClick = { selectedTab = 4 },
+                            selected = selectedTab == 5,
+                            onClick = { selectedTab = 5 },
                             icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                            label = { Text("Profile", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Profile", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -564,15 +674,21 @@ fun MainResidenceContent(
                         rooms = rooms,
                         announcements = announcements,
                         products = products,
+                        activeOrders = buyerOrders.filter { it.order_status !in listOf("Completed", "Cancelled") },
                         unreadNotificationCount = unreadNotifCount,
                         onNavigateToRooms = { selectedTab = 1 },
                         onNavigateToMarketplace = { selectedTab = 2 },
-                        onNavigateToCommunity = { showCreatePostScreen = true },
+                        onNavigateToCommunity = { selectedTab = 3 },
                         onAnnounceVacancyClick = { showAnnounceVacancyDialog = true },
                         onRoomClick = { room -> selectedRoom = room },
                         onProductClick = { prod -> selectedProduct = prod },
                         onNotificationsClick = { showNotificationsScreen = true },
-                        onProfileClick = { selectedTab = 4 },
+                        onProfileClick = { selectedTab = 5 },
+                        onTrackOrderClick = { order ->
+                            trackingOrderId = order.id
+                            showOrdersScreen = true
+                        },
+                        onViewAllOrdersClick = { showOrdersScreen = true },
                         modifier = Modifier.padding(innerPadding)
                     )
 
@@ -603,13 +719,31 @@ fun MainResidenceContent(
                         modifier = Modifier.padding(innerPadding)
                     )
 
-                    3 -> ChatListScreen(
+                    3 -> CommunityScreen(
+                        profile = profile,
+                        posts = posts,
+                        likedPostIds = likedPostIds,
+                        onCreatePostClick = { showCreatePostScreen = true },
+                        onToggleLike = { postId ->
+                            coroutineScope.launch { repository.toggleLikePost(postId) }
+                        },
+                        onOpenComments = { post -> commentsPost = post },
+                        onEditPost = { postId, newContent, newType ->
+                            coroutineScope.launch { repository.updatePost(postId, newContent, newType) }
+                        },
+                        onDeletePost = { postId ->
+                            coroutineScope.launch { repository.deletePost(postId) }
+                        },
+                        modifier = Modifier.padding(innerPadding)
+                    )
+
+                    4 -> ChatListScreen(
                         conversations = conversations,
                         onConversationClick = { conv -> selectedConversation = conv },
                         modifier = Modifier.padding(innerPadding)
                     )
 
-                    4 -> {
+                    5 -> {
                         val myRoom = rooms.find { it.resident_id == userId || it.id == profile?.room_id || it.room_number == profile?.room_id }
                         ProfileScreen(
                             profile = profile,
@@ -620,7 +754,7 @@ fun MainResidenceContent(
                             onUpdateRoomDetails = { roomId, status, coverUrl ->
                                 coroutineScope.launch { repository.updateRoomDetails(roomId, status, coverUrl) }
                             },
-                            onNavigateToMyPosts = { selectedTab = 0 },
+                            onNavigateToMyPosts = { selectedTab = 3 },
                             onNavigateToMyProducts = { selectedTab = 2 },
                             onNavigateToMyVacancies = { showAnnounceVacancyDialog = true },
                             onNavigateToSavedItems = { showSavedItemsScreen = true },

@@ -2,6 +2,7 @@ package com.example.ui.seller
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -21,6 +23,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.MarketplaceProduct
 import com.example.data.model.OrderRecord
 import com.example.ui.components.EmptyStateView
+import com.example.ui.components.SafeImage
 import com.example.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -31,6 +34,8 @@ fun SellerDashboardScreen(
     onAddProductClick: () -> Unit,
     onVerifyPayment: (orderId: String, confirmed: Boolean, reason: String) -> Unit,
     onUpdateOrderStatus: (orderId: String, newStatus: String) -> Unit,
+    onEditProduct: (MarketplaceProduct) -> Unit = {},
+    onDeleteProduct: (String) -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -38,6 +43,8 @@ fun SellerDashboardScreen(
     var selectedTab by remember { mutableStateOf("Orders") } // "Orders", "Verification", "My Products"
     var showRejectDialogForOrder by remember { mutableStateOf<OrderRecord?>(null) }
     var rejectionReason by remember { mutableStateOf("") }
+    var editingProduct by remember { mutableStateOf<MarketplaceProduct?>(null) }
+    var confirmDeleteProduct by remember { mutableStateOf<MarketplaceProduct?>(null) }
 
     Scaffold(
         topBar = {
@@ -254,7 +261,7 @@ fun SellerDashboardScreen(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            if (order.order_status == "Processing") {
+                                            if (order.order_status == "Processing" || order.order_status == "Payment Confirmed") {
                                                 Button(
                                                     onClick = { onUpdateOrderStatus(order.id, "Ready for Pickup") },
                                                     colors = ButtonDefaults.buttonColors(containerColor = AmberPending),
@@ -263,9 +270,16 @@ fun SellerDashboardScreen(
                                                 ) {
                                                     Text("Ready for Pickup", fontSize = 11.sp)
                                                 }
+                                                OutlinedButton(
+                                                    onClick = { onUpdateOrderStatus(order.id, "Verification") },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    modifier = Modifier.weight(1f)
+                                                ) {
+                                                    Text("Verification", fontSize = 11.sp)
+                                                }
                                             }
 
-                                            if (order.order_status == "Ready for Pickup") {
+                                            if (order.order_status == "Ready for Pickup" || order.order_status == "Verification") {
                                                 Button(
                                                     onClick = { onUpdateOrderStatus(order.id, "Completed") },
                                                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldAvailable),
@@ -303,29 +317,80 @@ fun SellerDashboardScreen(
                                 Card(
                                     shape = RoundedCornerShape(16.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color.White),
-                                    modifier = Modifier.fillMaxWidth()
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                                    modifier = Modifier.fillMaxWidth().testTag("seller_product_card_${prod.id}")
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(14.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(prod.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Slate900)
-                                            Text("KSh ${"%,d".format(prod.price)} • Stock: ${prod.quantity} (${prod.stockStatus})", fontSize = 12.sp, color = RoyalBlue)
-                                            Text("Category: ${prod.category} • Status: ${prod.status}", fontSize = 11.sp, color = Slate500)
+                                    Column(modifier = Modifier.padding(14.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(60.dp)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(Slate100)
+                                            ) {
+                                                SafeImage(
+                                                    model = prod.image_url.ifEmpty { prod.image_urls.firstOrNull() ?: "" },
+                                                    contentDescription = prod.name,
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    fallbackIcon = Icons.Default.ShoppingBag
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(12.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(prod.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                                                Text("KSh ${"%,d".format(prod.price)} • Stock: ${prod.quantity} (${prod.stockStatus})", fontSize = 12.sp, color = RoyalBlue)
+                                                Text("Category: ${prod.category} • Status: ${prod.status}", fontSize = 11.sp, color = Slate500)
+                                            }
+
+                                            Surface(
+                                                color = if (prod.status == "Active") EmeraldLight else AmberLight,
+                                                shape = RoundedCornerShape(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = prod.status.uppercase(),
+                                                    color = if (prod.status == "Active") EmeraldAvailable else AmberPending,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
                                         }
 
-                                        Surface(
-                                            color = EmeraldLight,
-                                            shape = RoundedCornerShape(6.dp)
+                                        Spacer(modifier = Modifier.height(10.dp))
+                                        HorizontalDivider(color = Slate100)
+                                        Spacer(modifier = Modifier.height(10.dp))
+
+                                        // Actions: Edit and Delete
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
-                                            Text(
-                                                text = "ACTIVE",
-                                                color = EmeraldAvailable,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
+                                            OutlinedButton(
+                                                onClick = { editingProduct = prod },
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = RoyalBlue),
+                                                modifier = Modifier.weight(1f).testTag("edit_product_${prod.id}")
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Re-Edit", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
+
+                                            OutlinedButton(
+                                                onClick = { confirmDeleteProduct = prod },
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.outlinedButtonColors(contentColor = RoseOccupied),
+                                                modifier = Modifier.weight(1f).testTag("delete_product_${prod.id}")
+                                            ) {
+                                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text("Delete", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                            }
                                         }
                                     }
                                 }
@@ -368,6 +433,61 @@ fun SellerDashboardScreen(
             },
             dismissButton = {
                 TextButton(onClick = { showRejectDialogForOrder = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Edit Product Dialog
+    if (editingProduct != null) {
+        EditProductDialog(
+            product = editingProduct!!,
+            onDismiss = { editingProduct = null },
+            onSave = { updated ->
+                onEditProduct(updated)
+                editingProduct = null
+            }
+        )
+    }
+
+    // Confirm Delete Product Dialog
+    if (confirmDeleteProduct != null) {
+        val prodToDelete = confirmDeleteProduct!!
+        AlertDialog(
+            onDismissRequest = { confirmDeleteProduct = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.DeleteOutline,
+                    contentDescription = null,
+                    tint = RoseOccupied,
+                    modifier = Modifier.size(36.dp)
+                )
+            },
+            title = {
+                Text("Delete Product", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    "Are you sure you want to delete \"${prodToDelete.name}\"? Once deleted, it will immediately disappear from the marketplace and cannot be undone.",
+                    fontSize = 13.sp,
+                    color = Slate600
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteProduct(prodToDelete.id)
+                        confirmDeleteProduct = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RoseOccupied),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text("Delete Permanently", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDeleteProduct = null }) {
                     Text("Cancel")
                 }
             }

@@ -32,6 +32,7 @@ data class RoomItem(
     val room_type: String = "Old Room", // "Old Room" or "New Room"
     val price_per_semester: Long = 15000L,
     val status: String = "Occupied", // "Occupied", "Vacant", "Available", "Pending Move-Out"
+    val ready_to_book: Boolean = false, // When room is available, admin allows registration
     val description: String = "",
     val image_url: String = "",
     val cover_image_url: String = "",
@@ -188,6 +189,7 @@ data class CommunityPost(
     val content: String = "",
     val post_type: String = "General", // "General", "Announcement", "Question", "Room", "Marketplace", "Event"
     val image_url: String = "",
+    val video_url: String = "",
     val likes_count: Long = 0L,
     val comments_count: Long = 0L,
     val created_at: Timestamp? = null,

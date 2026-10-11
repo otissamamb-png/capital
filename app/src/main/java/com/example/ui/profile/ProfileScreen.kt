@@ -9,6 +9,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -37,6 +38,7 @@ import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.RoomItem
 import com.example.data.model.UserProfile
+import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
 import com.example.ui.theme.*
 import java.io.ByteArrayOutputStream
@@ -95,17 +97,45 @@ fun ProfileScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(64.dp)
+                            .size(68.dp)
                             .clip(CircleShape)
-                            .background(RoyalBlue),
+                            .background(RoyalBlue)
+                            .clickable { showEditProfileDialog = true }
+                            .testTag("profile_avatar_clickable"),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = (profile?.full_name?.take(1) ?: "A").uppercase(),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        )
+                        if (profile?.profile_photo?.isNotBlank() == true) {
+                            SafeImage(
+                                model = profile.profile_photo,
+                                contentDescription = "Profile Photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                fallbackIcon = Icons.Default.Person
+                            )
+                        } else {
+                            Text(
+                                text = (profile?.full_name?.take(1) ?: "A").uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 24.sp
+                            )
+                        }
+
+                        // Camera icon overlay
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(22.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PhotoCamera,
+                                contentDescription = "Change photo",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
                     }
 
                     Spacer(modifier = Modifier.width(16.dp))
@@ -178,21 +208,13 @@ fun ProfileScreen(
                                 .height(150.dp)
                                 .background(Slate100)
                         ) {
-                            if (myRoom.cover_image_url.isNotEmpty()) {
-                                AsyncImage(
-                                    model = myRoom.cover_image_url,
-                                    contentDescription = "Room Cover",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Image(
-                                    painter = painterResource(id = R.drawable.room_showcase_interior_1791459685558),
-                                    contentDescription = "Room",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
+                            SafeImage(
+                                model = myRoom.cover_image_url.ifEmpty { myRoom.image_url },
+                                contentDescription = "Room Cover",
+                                contentScale = ContentScale.Crop,
+                                fallbackDrawableRes = R.drawable.room_showcase_interior_1791459685558,
+                                modifier = Modifier.fillMaxSize()
+                            )
 
                             StatusBadge(
                                 status = myRoom.status,
@@ -411,17 +433,120 @@ fun ProfileScreen(
         }
     }
 
-    // Edit Profile Dialog
+    // Edit Profile Dialog (Edit Details & Upload/Replace Profile Photo)
     if (showEditProfileDialog) {
         var editName by remember { mutableStateOf(profile?.full_name ?: "") }
         var editPhone by remember { mutableStateOf(profile?.phone ?: "") }
         var editRoom by remember { mutableStateOf(profile?.room_id ?: "") }
+        var editProfilePhoto by remember { mutableStateOf(profile?.profile_photo ?: "") }
+        var tempProfileBitmap by remember { mutableStateOf<Bitmap?>(null) }
+
+        val profilePhotoPicker = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.PickVisualMedia()
+        ) { uri: Uri? ->
+            if (uri != null) {
+                try {
+                    val inputStream = context.contentResolver.openInputStream(uri)
+                    val originalBitmap = BitmapFactory.decodeStream(inputStream)
+                    inputStream?.close()
+                    if (originalBitmap != null) {
+                        val maxDim = 400
+                        val scale = if (originalBitmap.width > maxDim || originalBitmap.height > maxDim) {
+                            maxDim.toFloat() / maxOf(originalBitmap.width, originalBitmap.height)
+                        } else 1.0f
+                        val scaled = Bitmap.createScaledBitmap(
+                            originalBitmap,
+                            (originalBitmap.width * scale).toInt(),
+                            (originalBitmap.height * scale).toInt(),
+                            true
+                        )
+                        tempProfileBitmap = scaled
+                        val baos = ByteArrayOutputStream()
+                        scaled.compress(Bitmap.CompressFormat.JPEG, 60, baos)
+                        editProfilePhoto = "data:image/jpeg;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
 
         AlertDialog(
             onDismissRequest = { showEditProfileDialog = false },
-            title = { Text("Edit Profile", fontWeight = FontWeight.Bold) },
+            title = { Text("Edit Profile & Photo", fontWeight = FontWeight.Bold) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Profile Photo Avatar & Upload/Replace Action
+                    Box(
+                        modifier = Modifier
+                            .size(76.dp)
+                            .clip(CircleShape)
+                            .background(RoyalBlue)
+                            .border(2.dp, RoyalBlue, CircleShape)
+                            .clickable {
+                                profilePhotoPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (tempProfileBitmap != null) {
+                            Image(
+                                bitmap = tempProfileBitmap!!.asImageBitmap(),
+                                contentDescription = "Profile Photo Preview",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else if (editProfilePhoto.isNotBlank()) {
+                            SafeImage(
+                                model = editProfilePhoto,
+                                contentDescription = "Profile Photo",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop,
+                                fallbackIcon = Icons.Default.Person
+                            )
+                        } else {
+                            Text(
+                                text = (editName.take(1).ifEmpty { "A" }).uppercase(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 28.sp
+                            )
+                        }
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = {
+                                profilePhotoPicker.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("upload_profile_photo_button")
+                        ) {
+                            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (editProfilePhoto.isNotBlank()) "Replace Photo" else "Upload Photo", fontSize = 12.sp)
+                        }
+
+                        if (editProfilePhoto.isNotBlank()) {
+                            TextButton(
+                                onClick = {
+                                    editProfilePhoto = ""
+                                    tempProfileBitmap = null
+                                }
+                            ) {
+                                Text("Remove", color = RoseOccupied, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = Slate100)
+
                     OutlinedTextField(
                         value = editName,
                         onValueChange = { editName = it },
@@ -449,9 +574,10 @@ fun ProfileScreen(
                 Button(
                     onClick = {
                         val updated = (profile ?: UserProfile()).copy(
-                            full_name = editName,
-                            phone = editPhone,
-                            room_id = editRoom
+                            full_name = editName.trim(),
+                            phone = editPhone.trim(),
+                            room_id = editRoom.trim(),
+                            profile_photo = editProfilePhoto
                         )
                         onUpdateProfile(updated)
                         showEditProfileDialog = false

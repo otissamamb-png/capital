@@ -102,6 +102,7 @@ dependencies {
   implementation(libs.firebase.ai)
   // Firestore & Auth
   implementation(libs.firebase.firestore)
+  implementation(libs.firebase.messaging)
   implementation(libs.firebase.auth)
   implementation(libs.androidx.credentials)
   implementation(libs.androidx.credentials.play.services)
