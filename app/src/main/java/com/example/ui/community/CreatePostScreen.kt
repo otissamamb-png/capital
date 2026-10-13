@@ -152,7 +152,7 @@ fun CreatePostScreen(
                             if (content.isNotBlank() && !isWordCountExceeded) {
                                 isSubmitting = true
                                 val post = CommunityPost(
-                                    author_id = profile?.id ?: "",
+                                    author_id = profile?.auth_user_id?.ifBlank { profile.id } ?: profile?.id ?: "",
                                     author_name = profile?.full_name ?: "Alex Kimani",
                                     author_photo = profile?.profile_photo ?: "",
                                     content = content.trim(),

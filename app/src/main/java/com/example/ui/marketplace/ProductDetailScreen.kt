@@ -47,6 +47,7 @@ fun ProductDetailScreen(
     onAddToCart: (CartItemData) -> Unit,
     onBuyNow: (MarketplaceProduct, Long) -> Unit,
     onChatWithSeller: (MarketplaceProduct) -> Unit,
+    onRateProduct: (String, Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -518,6 +519,52 @@ fun ProductDetailScreen(
                                     color = RoyalBlue
                                 )
                             }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Rate this Product Card
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth().testTag("rate_product_card")
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text("Rate This Product", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Slate900)
+                        Spacer(modifier = Modifier.height(6.dp))
+                        var userRating by remember { mutableStateOf(5) }
+                        var ratedSuccess by remember { mutableStateOf(false) }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            for (i in 1..5) {
+                                IconButton(
+                                    onClick = { userRating = i },
+                                    modifier = Modifier.size(36.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (i <= userRating) Icons.Default.Star else Icons.Default.StarBorder,
+                                        contentDescription = "$i Stars",
+                                        tint = Color(0xFFF59E0B),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Button(
+                            onClick = {
+                                onRateProduct(product.id, userRating)
+                                ratedSuccess = true
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth().height(38.dp)
+                        ) {
+                            Text(if (ratedSuccess) "Rating Submitted! Thank You" else "Submit $userRating-Star Rating", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                         }
                     }
                 }

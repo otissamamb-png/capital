@@ -29,6 +29,8 @@ import com.example.ui.theme.*
 @Composable
 fun NotificationsScreen(
     notifications: List<NotificationItem>,
+    locallyReadIds: Set<String> = emptySet(),
+    onMarkAllRead: () -> Unit = {},
     onMarkRead: (String) -> Unit,
     onTrackOrder: (String) -> Unit = {},
     onBack: () -> Unit,
@@ -38,21 +40,48 @@ fun NotificationsScreen(
     var selectedTab by remember { mutableStateOf("All") } // "All", "Unread"
     var selectedNotification by remember { mutableStateOf<NotificationItem?>(null) }
 
-    val displayNotifications = remember(notifications, selectedTab) {
-        if (selectedTab == "Unread") notifications.filter { !it.is_read }
-        else notifications
+    val displayNotifications = remember(notifications, selectedTab, locallyReadIds) {
+        if (selectedTab == "Unread") {
+            notifications.filter { !it.is_read && !locallyReadIds.contains(it.id) }
+        } else {
+            notifications
+        }
+    }
+
+    val unreadCount = remember(notifications, locallyReadIds) {
+        notifications.count { !it.is_read && !locallyReadIds.contains(it.id) }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Notifications", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        text = "Notifications",
+                        fontWeight = FontWeight.Bold,
+                        color = appHeadingBlue()
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("notifications_back")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
+                actions = {
+                    if (unreadCount > 0) {
+                        TextButton(
+                            onClick = onMarkAllRead,
+                            modifier = Modifier.testTag("notifications_mark_all_read_button")
+                        ) {
+                            Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp), tint = RoyalBlue)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Mark All Read", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = RoyalBlue)
+                        }
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                )
             )
         },
         modifier = modifier
@@ -60,7 +89,7 @@ fun NotificationsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Slate50)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(paddingValues)
         ) {
             // Tab Selector (All / Unread)
@@ -83,7 +112,12 @@ fun NotificationsScreen(
                 FilterChip(
                     selected = selectedTab == "Unread",
                     onClick = { selectedTab = "Unread" },
-                    label = { Text("Unread", fontWeight = FontWeight.Bold) },
+                    label = {
+                        Text(
+                            text = if (unreadCount > 0) "Unread ($unreadCount)" else "Unread",
+                            fontWeight = FontWeight.Bold
+                        )
+                    },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = RoyalBlue,
                         selectedLabelColor = Color.White
@@ -105,11 +139,13 @@ fun NotificationsScreen(
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(displayNotifications, key = { it.id }) { notif ->
+                        val isRead = notif.is_read || locallyReadIds.contains(notif.id)
                         NotificationCard(
                             item = notif,
+                            isRead = isRead,
                             onClick = {
                                 selectedNotification = notif
-                                if (!notif.is_read) {
+                                if (!isRead) {
                                     onMarkRead(notif.id)
                                 }
                             }
@@ -225,13 +261,14 @@ fun NotificationsScreen(
 @Composable
 fun NotificationCard(
     item: NotificationItem,
+    isRead: Boolean = item.is_read,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (item.is_read) Color.White else BlueSurface
+            containerColor = if (isRead) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surfaceVariant
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
@@ -271,17 +308,17 @@ fun NotificationCard(
                     text = item.title,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Slate900
+                    color = appHeadingBlue()
                 )
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = item.message,
                     fontSize = 12.sp,
-                    color = Slate600
+                    color = appSubheadingOrange()
                 )
             }
 
-            if (!item.is_read) {
+            if (!isRead) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)

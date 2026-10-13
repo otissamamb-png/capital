@@ -96,9 +96,23 @@ fun CapitalHomeApp() {
                 )
             }
         }
-        Firebase.auth.addAuthStateListener(listener)
+        val firebaseAuth = try { Firebase.auth } catch (_: Throwable) { null }
+        try {
+            firebaseAuth?.addAuthStateListener(listener)
+        } catch (_: Throwable) {}
         onDispose {
-            Firebase.auth.removeAuthStateListener(listener)
+            try {
+                firebaseAuth?.removeAuthStateListener(listener)
+            } catch (_: Throwable) {}
+        }
+    }
+
+    LaunchedEffect(currentSessionUser?.id) {
+        if (currentSessionUser != null) {
+            val isValid = repository.validateSession()
+            if (!isValid) {
+                currentSessionUser = null
+            }
         }
     }
 
@@ -224,8 +238,9 @@ fun MainResidenceContent(
     val savedRoomIds = remember(savedItems) {
         savedItems.filter { it.item_type == "room" }.map { it.item_id }.toSet()
     }
-    val unreadNotifCount = remember(notifications) {
-        notifications.count { !it.is_read }
+    val locallyReadNotifIds = remember { mutableStateListOf<String>() }
+    val unreadNotifCount = remember(notifications, locallyReadNotifIds.toList()) {
+        notifications.count { !it.is_read && !locallyReadNotifIds.contains(it.id) }
     }
 
     // Subscreen Router
@@ -304,11 +319,19 @@ fun MainResidenceContent(
                         }
                     }
                 },
+                onRateProduct = { prodId, rating ->
+                    coroutineScope.launch {
+                        repository.rateProduct(prodId, rating)
+                    }
+                },
                 onBack = { selectedProduct = null }
             )
         }
 
         selectedConversation != null -> {
+            LaunchedEffect(selectedConversation!!.id) {
+                repository.markConversationRead(selectedConversation!!.id)
+            }
             ChatConversationScreen(
                 conversation = selectedConversation!!,
                 currentUserId = userId,
@@ -478,11 +501,18 @@ fun MainResidenceContent(
 
         showNotificationsScreen -> {
             LaunchedEffect(Unit) {
+                locallyReadNotifIds.addAll(notifications.map { it.id })
                 repository.markAllNotificationsRead(userId)
             }
             NotificationsScreen(
                 notifications = notifications,
+                locallyReadIds = locallyReadNotifIds.toSet(),
+                onMarkAllRead = {
+                    locallyReadNotifIds.addAll(notifications.map { it.id })
+                    coroutineScope.launch { repository.markAllNotificationsRead(userId) }
+                },
                 onMarkRead = { id ->
+                    locallyReadNotifIds.add(id)
                     coroutineScope.launch { repository.markNotificationRead(id) }
                 },
                 onTrackOrder = { orderId ->
@@ -676,6 +706,13 @@ fun MainResidenceContent(
                         products = products,
                         activeOrders = buyerOrders.filter { it.order_status !in listOf("Completed", "Cancelled") },
                         unreadNotificationCount = unreadNotifCount,
+                        savedProductIds = savedProductIds,
+                        onToggleSave = { item ->
+                            coroutineScope.launch { repository.toggleSaveItem(item) }
+                        },
+                        onAddToCart = { cartItem ->
+                            coroutineScope.launch { repository.addToCart(cartItem) }
+                        },
                         onNavigateToRooms = { selectedTab = 1 },
                         onNavigateToMarketplace = { selectedTab = 2 },
                         onNavigateToCommunity = { selectedTab = 3 },
@@ -715,6 +752,9 @@ fun MainResidenceContent(
                         },
                         onToggleSave = { item ->
                             coroutineScope.launch { repository.toggleSaveItem(item) }
+                        },
+                        onAddToCart = { cartItem ->
+                            coroutineScope.launch { repository.addToCart(cartItem) }
                         },
                         modifier = Modifier.padding(innerPadding)
                     )

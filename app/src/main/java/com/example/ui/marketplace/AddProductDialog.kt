@@ -179,7 +179,7 @@ fun AddProductDialog(
                 }
 
                 // 1. PRODUCT IMAGES (At least 1 required)
-                Text("Product Images * (Up to 8 images, first is cover)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                Text("Product Images * (Up to 8 images, first is cover)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = appHeadingBlue())
                 Spacer(modifier = Modifier.height(6.dp))
 
                 LazyRow(
@@ -269,7 +269,7 @@ fun AddProductDialog(
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Category & Subcategory
-                Text("Category *", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Slate700)
+                Text("Category *", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = appHeadingBlue())
                 val categories = listOf("Electronics", "Phones", "Fashion", "Shoes", "Food", "Books", "Furniture", "Household")
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -351,7 +351,7 @@ fun AddProductDialog(
                     )
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Condition *", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Slate700)
+                        Text("Condition *", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = appHeadingBlue())
                         val conditions = listOf("New", "Like New", "Used", "Refurbished")
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             conditions.take(2).forEach { cond ->
@@ -368,7 +368,7 @@ fun AddProductDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 4. STRUCTURED SPECIFICATIONS
-                Text("Specifications (Optional but recommended)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                Text("Specifications (Optional but recommended)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = appHeadingBlue())
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -436,7 +436,7 @@ fun AddProductDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // 5. PICKUP & DELIVERY
-                Text("Pickup & Delivery", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Slate900)
+                Text("Pickup & Delivery", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = appHeadingBlue())
                 Spacer(modifier = Modifier.height(6.dp))
 
                 OutlinedTextField(

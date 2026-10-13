@@ -160,9 +160,8 @@ fun CommunityScreen(
             } else {
                 items(filteredPosts, key = { it.id }) { post ->
                     val isMyPost = profile != null && (
-                        post.author_id == profile.auth_user_id ||
-                        post.author_id == profile.id ||
-                        (profile.full_name.isNotBlank() && post.author_name.equals(profile.full_name, ignoreCase = true))
+                        (profile.auth_user_id.isNotBlank() && post.author_id == profile.auth_user_id) ||
+                        (profile.id.isNotBlank() && post.author_id == profile.id)
                     )
                     CommunityPostCard(
                         post = post,

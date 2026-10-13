@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.example.data.model.CartItemData
 import com.example.data.model.MarketplaceProduct
 import com.example.data.model.SavedItemData
 import com.example.ui.components.EmptyStateView
@@ -43,6 +44,7 @@ fun MarketplaceScreen(
     onOrdersClick: () -> Unit,
     onSellClick: () -> Unit,
     onToggleSave: (SavedItemData) -> Unit,
+    onAddToCart: (CartItemData) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var searchQuery by remember { mutableStateOf("") }
@@ -241,6 +243,19 @@ fun MarketplaceScreen(
                                     image_url = product.image_url
                                 )
                             )
+                        },
+                        onAddToCart = {
+                            onAddToCart(
+                                CartItemData(
+                                    product_id = product.id,
+                                    product_name = product.name,
+                                    price = product.price,
+                                    quantity = 1L,
+                                    image_url = product.image_url,
+                                    seller_name = product.seller_name,
+                                    seller_id = product.seller_id
+                                )
+                            )
                         }
                     )
                 }
@@ -255,6 +270,7 @@ fun ProductGridCard(
     isSaved: Boolean,
     onProductClick: () -> Unit,
     onToggleSave: () -> Unit,
+    onAddToCart: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -395,6 +411,23 @@ fun ProductGridCard(
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                     )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Button(
+                    onClick = onAddToCart,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldAvailable),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(32.dp)
+                        .testTag("add_to_cart_grid_${product.id}")
+                ) {
+                    Icon(Icons.Default.AddShoppingCart, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Add to Cart", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }

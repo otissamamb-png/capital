@@ -31,6 +31,7 @@ import com.example.data.model.*
 import com.example.ui.components.RoomTypeBadge
 import com.example.ui.components.SafeImage
 import com.example.ui.components.StatusBadge
+import com.example.ui.marketplace.ProductGridCard
 import com.example.ui.theme.*
 
 @Composable
@@ -41,6 +42,9 @@ fun HomeScreen(
     products: List<MarketplaceProduct>,
     activeOrders: List<OrderRecord> = emptyList(),
     unreadNotificationCount: Int,
+    savedProductIds: Set<String> = emptySet(),
+    onToggleSave: (SavedItemData) -> Unit = {},
+    onAddToCart: (CartItemData) -> Unit = {},
     onNavigateToRooms: () -> Unit,
     onNavigateToMarketplace: () -> Unit,
     onNavigateToCommunity: () -> Unit,
@@ -68,6 +72,12 @@ fun HomeScreen(
     ) {
         // 1. Top Greeting Header
         item {
+            val currentHour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+            val greeting = when {
+                currentHour < 12 -> "Good morning"
+                currentHour < 17 -> "Good afternoon"
+                else -> "Good evening"
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -75,15 +85,15 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(
-                        text = "Good morning, ${profile?.full_name?.split(" ")?.firstOrNull() ?: "Alex"}",
+                        text = "$greeting, ${profile?.full_name?.split(" ")?.firstOrNull() ?: "Alex"}",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = appHeadingBlue()
                     )
                     Text(
                         text = "Welcome to Capital Home Residence",
                         fontSize = 13.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = appSubheadingOrange()
                     )
                 }
 
@@ -382,7 +392,7 @@ fun HomeScreen(
                     text = "Residence Overview",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Slate900
+                    color = appHeadingBlue()
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
@@ -423,7 +433,7 @@ fun HomeScreen(
                         text = "Available Rooms",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Slate900
+                        color = appHeadingBlue()
                     )
                     TextButton(
                         onClick = onNavigateToRooms,
@@ -530,52 +540,82 @@ fun HomeScreen(
             }
         }
 
-        // 7. Recent Marketplace Listings (Newest 30 Products)
+        // 7. Recent Marketplace Listings (Newest 30 Products going downwards)
         if (newestProducts.isNotEmpty()) {
             item {
-                Column {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "Newest Marketplace Products",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = appHeadingBlue()
+                        )
+                        Text(
+                            text = "Showing newest ${newestProducts.size} listings from residents",
+                            fontSize = 11.sp,
+                            color = appSubheadingOrange()
+                        )
+                    }
+                    TextButton(
+                        onClick = onNavigateToMarketplace,
+                        modifier = Modifier.testTag("explore_all_products_button")
                     ) {
-                        Column {
-                            Text(
-                                text = "Newest Marketplace Products",
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Slate900
-                            )
-                            Text(
-                                text = "Showing newest ${newestProducts.size} listings from residents",
-                                fontSize = 11.sp,
-                                color = Slate500
-                            )
-                        }
-                        TextButton(
-                            onClick = onNavigateToMarketplace,
-                            modifier = Modifier.testTag("explore_all_products_button")
-                        ) {
-                            Text(
-                                text = "Explore All",
-                                color = RoyalBlue,
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp
+                        Text(
+                            text = "Explore All",
+                            color = RoyalBlue,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+
+            items(newestProducts.chunked(2), key = { it.first().id }) { pair ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    pair.forEach { prod ->
+                        Box(modifier = Modifier.weight(1f)) {
+                            ProductGridCard(
+                                product = prod,
+                                isSaved = savedProductIds.contains(prod.id),
+                                onProductClick = { onProductClick(prod) },
+                                onToggleSave = {
+                                    onToggleSave(
+                                        SavedItemData(
+                                            item_type = "product",
+                                            item_id = prod.id,
+                                            title = prod.name,
+                                            subtitle = "KSh ${prod.price}",
+                                            price = prod.price,
+                                            image_url = prod.image_url
+                                        )
+                                    )
+                                },
+                                onAddToCart = {
+                                    onAddToCart(
+                                        CartItemData(
+                                            product_id = prod.id,
+                                            product_name = prod.name,
+                                            price = prod.price,
+                                            quantity = 1L,
+                                            image_url = prod.image_url,
+                                            seller_name = prod.seller_name,
+                                            seller_id = prod.seller_id
+                                        )
+                                    )
+                                }
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(vertical = 4.dp),
-                        modifier = Modifier.testTag("home_newest_products_row")
-                    ) {
-                        items(newestProducts, key = { it.id }) { prod ->
-                            HomeProductCard(
-                                product = prod,
-                                onClick = { onProductClick(prod) }
-                            )
-                        }
+                    if (pair.size == 1) {
+                        Spacer(modifier = Modifier.weight(1f))
                     }
                 }
             }
@@ -748,7 +788,7 @@ fun HomeProductCard(
 ) {
     Card(
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
             .width(160.dp)
@@ -783,7 +823,7 @@ fun HomeProductCard(
                 text = product.name,
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Bold,
-                color = Slate900,
+                color = appHeadingBlue(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -794,6 +834,73 @@ fun HomeProductCard(
                 fontWeight = FontWeight.Bold,
                 color = RoyalBlue
             )
+        }
+    }
+}
+
+@Composable
+fun HomeProductVerticalCard(
+    product: MarketplaceProduct,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Slate100),
+                contentAlignment = Alignment.Center
+            ) {
+                val icon = when (product.category.lowercase()) {
+                    "electronics", "phones" -> Icons.Default.Headphones
+                    "fashion", "shoes" -> Icons.Default.Checkroom
+                    "food" -> Icons.Default.Fastfood
+                    "books" -> Icons.Default.MenuBook
+                    else -> Icons.Default.ShoppingBag
+                }
+                SafeImage(
+                    model = product.image_url.ifEmpty { product.image_urls.firstOrNull() ?: "" },
+                    contentDescription = product.name,
+                    contentScale = ContentScale.Crop,
+                    fallbackIcon = icon,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = product.name,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = appHeadingBlue(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "KSh ${"%,d".format(product.price)} • ${product.category}",
+                    fontSize = 12.sp,
+                    color = appSubheadingOrange()
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Sold by ${product.seller_name.ifEmpty { "Resident" }}",
+                    fontSize = 11.sp,
+                    color = Slate500
+                )
+            }
         }
     }
 }

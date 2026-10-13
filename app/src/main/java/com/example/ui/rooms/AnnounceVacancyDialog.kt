@@ -18,9 +18,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.example.data.model.UserProfile
 import com.example.data.model.VacancyItem
-import com.example.ui.theme.RoyalBlue
-import com.example.ui.theme.Slate500
-import com.example.ui.theme.Slate900
+import com.example.ui.theme.*
 
 @Composable
 fun AnnounceVacancyDialog(
@@ -65,7 +63,7 @@ fun AnnounceVacancyDialog(
                             text = "Announce Vacancy",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Slate900
+                            color = appHeadingBlue()
                         )
                     }
                     IconButton(onClick = onDismiss) {
@@ -94,7 +92,7 @@ fun AnnounceVacancyDialog(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 // Room Type Selection
-                Text("Room Classification", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                Text("Room Classification", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = appHeadingBlue())
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

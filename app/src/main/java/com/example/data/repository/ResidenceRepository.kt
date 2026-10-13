@@ -155,17 +155,38 @@ class ResidenceRepository(
         }
     }
 
+    suspend fun validateSession(): Boolean {
+        val sessionUser = getCurrentSessionUser() ?: return false
+        return try {
+            val doc = db.collection("profiles").document(sessionUser.id).get().await()
+            if (!doc.exists()) {
+                signOut()
+                false
+            } else {
+                val status = doc.getString("account_status") ?: "active"
+                if (status == "deleted" || status == "suspended") {
+                    signOut()
+                    false
+                } else {
+                    val dbRole = doc.getString("role") ?: "resident"
+                    if (dbRole != sessionUser.role) {
+                        saveSession(sessionUser.copy(role = dbRole))
+                    }
+                    true
+                }
+            }
+        } catch (_: Exception) {
+            true
+        }
+    }
+
     suspend fun signInWithEmailPassword(email: String, password: String): Result<Unit> {
         return try {
             val trimmedEmail = email.trim().lowercase()
+            if (trimmedEmail.isBlank() || password.isBlank()) {
+                return Result.failure(Exception("Please enter both email and password."))
+            }
             val inputHash = hashPassword(password)
-
-            // Try Firebase Auth if available, but do not fail if not configured
-            var firebaseAuthSuccess = false
-            try {
-                auth?.signInWithEmailAndPassword(trimmedEmail, password)?.await()
-                firebaseAuthSuccess = true
-            } catch (_: Throwable) {}
 
             // Verify in Firestore profiles collection
             val snap = db.collection("profiles")
@@ -180,9 +201,21 @@ class ResidenceRepository(
                 val role = doc.getString("role") ?: "resident"
                 val phone = doc.getString("phone") ?: ""
                 val roomId = doc.getString("room_id") ?: ""
+                val status = doc.getString("account_status") ?: "active"
 
-                // Verify password hash or Firebase Auth success
-                if (storedHash.isNullOrBlank() || storedHash == inputHash || firebaseAuthSuccess) {
+                if (status == "deleted" || status == "suspended") {
+                    return Result.failure(Exception("This account is inactive or has been suspended. Please contact administrator."))
+                }
+
+                // Password must match: hash matches stored password_hash (or fallback to original password for migration)
+                val isPasswordMatch = !storedHash.isNullOrBlank() && (storedHash == inputHash || storedHash == password)
+
+                if (isPasswordMatch) {
+                    if (storedHash != inputHash) {
+                        try {
+                            doc.reference.update("password_hash", inputHash)
+                        } catch (_: Exception) {}
+                    }
                     saveSession(SessionUser(id = uid, email = trimmedEmail, name = name, role = role, phone = phone, roomId = roomId))
                     if (role == "admin") {
                         logAdminAction("admin_login", "auth", uid, "Administrator logged into shared portal")
@@ -192,10 +225,10 @@ class ResidenceRepository(
                     return Result.failure(Exception("Invalid password. Please check your password or use 'Forgot Password?' to reset it."))
                 }
             } else {
-                // If logging in as admin seed before explicit record exists
+                // If logging in as admin seed before explicit record exists in cloud
                 if (trimmedEmail == "okindatechhub@gmail.com") {
                     val adminHash = hashPassword("Okinda3078")
-                    if (inputHash == adminHash || password == "Okinda3078" || firebaseAuthSuccess) {
+                    if (inputHash == adminHash || password == "Okinda3078") {
                         val uid = "admin_okinda_3078"
                         val session = SessionUser(
                             id = uid,
@@ -226,12 +259,42 @@ class ResidenceRepository(
                     }
                 }
 
-                // Check default resident seed
+                // Check default resident seed before explicit record exists
                 if (trimmedEmail == "alex@capitalhome.co.ke" || trimmedEmail == "resident@capitalhome.com") {
-                    val uid = "res_seed_alex"
-                    saveSession(SessionUser(id = uid, email = trimmedEmail, name = "Alex Kimani", role = "resident", phone = "+254 712 345 678", roomId = "204"))
-                    return Result.success(Unit)
+                    val residentHash = hashPassword("Resident123")
+                    if (inputHash == residentHash || password == "Resident123") {
+                        val uid = "res_seed_alex"
+                        val session = SessionUser(
+                            id = uid,
+                            email = trimmedEmail,
+                            name = "Alex Kimani",
+                            role = "resident",
+                            phone = "+254 712 345 678",
+                            roomId = "room_204"
+                        )
+                        saveSession(session)
+                        try {
+                            db.collection("profiles").document(uid).set(
+                                mapOf(
+                                    "auth_user_id" to uid,
+                                    "full_name" to "Alex Kimani",
+                                    "email" to trimmedEmail,
+                                    "phone" to "+254 712 345 678",
+                                    "role" to "resident",
+                                    "room_id" to "room_204",
+                                    "account_status" to "active",
+                                    "password_hash" to residentHash,
+                                    "created_at" to FieldValue.serverTimestamp(),
+                                    "updated_at" to FieldValue.serverTimestamp()
+                                )
+                            ).await()
+                        } catch (_: Exception) {}
+                        return Result.success(Unit)
+                    } else {
+                        return Result.failure(Exception("Invalid password. Please check your password or use 'Forgot Password?' to reset it."))
+                    }
                 }
+
                 return Result.failure(Exception("No account registered with $trimmedEmail. Please sign up to create your account."))
             }
         } catch (e: Exception) {
@@ -248,15 +311,18 @@ class ResidenceRepository(
         val trimmedEmail = email.trim().lowercase()
         return try {
             val snap = db.collection("profiles").whereEqualTo("email", trimmedEmail).get().await()
-            if (snap.isEmpty && trimmedEmail != "okindatechhub@gmail.com" && trimmedEmail != "alex@capitalhome.co.ke") {
-                return Result.failure(Exception("No registered account found with $trimmedEmail."))
+            if (snap.isEmpty && trimmedEmail != "okindatechhub@gmail.com" && trimmedEmail != "alex@capitalhome.co.ke" && trimmedEmail != "resident@capitalhome.com") {
+                return Result.failure(Exception("No registered account found with $trimmedEmail. Please sign up to create your account."))
             }
 
             val code = String.format("%06d", (100000..999999).random())
+            val expiresAt = System.currentTimeMillis() + (15 * 60 * 1000L) // 15 minutes expiry
             db.collection("password_resets").document(trimmedEmail).set(
                 mapOf(
                     "email" to trimmedEmail,
                     "code" to code,
+                    "expires_at" to expiresAt,
+                    "used" to false,
                     "created_at" to FieldValue.serverTimestamp()
                 )
             ).await()
@@ -265,7 +331,7 @@ class ResidenceRepository(
                 com.example.util.NotificationHelper.showNotification(
                     ctx,
                     "Password Reset Verification Code",
-                    "Your Capital Home verification code is $code. Enter this 6-digit code to reset your password."
+                    "Your Capital Home verification code is $code. Enter this 6-digit code to reset your password (valid for 15 minutes)."
                 )
             }
 
@@ -283,8 +349,16 @@ class ResidenceRepository(
             if (!doc.exists()) {
                 return Result.failure(Exception("No verification code request found for $trimmedEmail. Please request a new code."))
             }
+            val isUsed = doc.getBoolean("used") ?: false
+            if (isUsed) {
+                return Result.failure(Exception("This verification code has already been used. Please request a new code."))
+            }
+            val expiresAt = doc.getLong("expires_at")
+            if (expiresAt != null && System.currentTimeMillis() > expiresAt) {
+                return Result.failure(Exception("This verification code has expired. Please request a new code."))
+            }
             val stored = doc.getString("code") ?: ""
-            if (stored == trimmedCode) {
+            if (stored.isNotBlank() && stored == trimmedCode) {
                 Result.success(true)
             } else {
                 Result.failure(Exception("Invalid verification code. Please check your 6-digit code and try again."))
@@ -300,6 +374,11 @@ class ResidenceRepository(
             return Result.failure(Exception("New password must be at least 6 characters."))
         }
         return try {
+            val resetDoc = db.collection("password_resets").document(trimmedEmail).get().await()
+            if (!resetDoc.exists()) {
+                return Result.failure(Exception("No active password reset session for $trimmedEmail. Please request a new code."))
+            }
+
             val newHash = hashPassword(newPassword)
             val snap = db.collection("profiles").whereEqualTo("email", trimmedEmail).get().await()
 
@@ -320,6 +399,7 @@ class ResidenceRepository(
                 userDoc.reference.update(
                     mapOf(
                         "password_hash" to newHash,
+                        "account_status" to "active",
                         "updated_at" to FieldValue.serverTimestamp()
                     )
                 ).await()
@@ -335,14 +415,37 @@ class ResidenceRepository(
                         "email" to trimmedEmail,
                         "phone" to phone,
                         "role" to "admin",
+                        "account_status" to "active",
                         "password_hash" to newHash,
                         "created_at" to FieldValue.serverTimestamp(),
                         "updated_at" to FieldValue.serverTimestamp()
                     )
                 ).await()
+            } else if (trimmedEmail == "alex@capitalhome.co.ke" || trimmedEmail == "resident@capitalhome.com") {
+                uid = "res_seed_alex"
+                name = "Alex Kimani"
+                role = "resident"
+                phone = "+254 712 345 678"
+                roomId = "room_204"
+                db.collection("profiles").document(uid).set(
+                    mapOf(
+                        "auth_user_id" to uid,
+                        "full_name" to name,
+                        "email" to trimmedEmail,
+                        "phone" to phone,
+                        "role" to "resident",
+                        "room_id" to roomId,
+                        "account_status" to "active",
+                        "password_hash" to newHash,
+                        "created_at" to FieldValue.serverTimestamp(),
+                        "updated_at" to FieldValue.serverTimestamp()
+                    )
+                ).await()
+            } else {
+                return Result.failure(Exception("No account registered with $trimmedEmail."))
             }
 
-            // Clean up reset code
+            // Clean up reset code so it cannot be reused
             try {
                 db.collection("password_resets").document(trimmedEmail).delete().await()
             } catch (_: Exception) {}
@@ -439,13 +542,6 @@ class ResidenceRepository(
             // 3. Generate persistent resident ID
             val uid = "usr_" + System.currentTimeMillis() + "_" + (1000..9999).random()
 
-            // Optional Firebase Auth attempt (gracefully handle OPERATION_NOT_ALLOWED)
-            try {
-                auth?.createUserWithEmailAndPassword(trimmedEmail, password)?.await()
-            } catch (e: Throwable) {
-                Log.d("ResidenceRepository", "Firebase Auth registration note: ${e.message}")
-            }
-
             val price = if (roomType.contains("New", ignoreCase = true)) 25000L else 15000L
             val normalizedStatus = if (roomStatus.equals("Vacant", ignoreCase = true)) "Vacant" else "Occupied"
 
@@ -528,8 +624,8 @@ class ResidenceRepository(
 
     suspend fun toggleRoomReadyToBook(roomId: String, ready: Boolean): Result<Unit> {
         return try {
-            if (!isCurrentUserAdmin()) {
-                return Result.failure(SecurityException("Unauthorized: Only administrators can update booking readiness."))
+            if (!verifyAdminAccess()) {
+                return Result.failure(SecurityException("Unauthorized: Administrator permissions verified on backend are required."))
             }
             db.collection("rooms").document(roomId).update(
                 mapOf(
@@ -561,8 +657,8 @@ class ResidenceRepository(
 
     suspend fun deleteUser(userId: String): Result<Unit> {
         return try {
-            if (!isCurrentUserAdmin()) {
-                return Result.failure(SecurityException("Unauthorized: Only administrators can delete users."))
+            if (!verifyAdminAccess()) {
+                return Result.failure(SecurityException("Unauthorized: Administrator permissions verified on backend are required."))
             }
             val profRef = db.collection("profiles").document(userId)
             val snap = profRef.get().await()
@@ -934,9 +1030,37 @@ class ResidenceRepository(
         }
     }
 
+    suspend fun rateProduct(productId: String, rating: Int): Result<Unit> {
+        return try {
+            val ref = db.collection("products").document(productId)
+            val snap = ref.get().await()
+            val currentRating = snap.getDouble("rating") ?: 4.8
+            val currentReviews = snap.getLong("review_count") ?: 1L
+            val newReviews = currentReviews + 1
+            val newRating = ((currentRating * currentReviews) + rating) / newReviews
+            ref.update(
+                mapOf(
+                    "rating" to newRating,
+                    "review_count" to newReviews,
+                    "updated_at" to FieldValue.serverTimestamp()
+                )
+            ).await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            handleFirestoreError(e, OperationType.UPDATE, "products/$productId")
+            Result.failure(e)
+        }
+    }
+
     suspend fun updateProduct(product: MarketplaceProduct): Result<Unit> {
+        val currentUid = getCurrentUserId()
         return try {
             val ref = db.collection("products").document(product.id)
+            val snap = ref.get().await()
+            val sellerId = snap.getString("seller_id")
+            if (currentUid != null && sellerId != null && sellerId != currentUid && !isCurrentUserAdmin()) {
+                return Result.failure(SecurityException("Unauthorized: You can only edit your own products."))
+            }
             val updates = mapOf(
                 "name" to product.name,
                 "category" to product.category,
@@ -987,8 +1111,15 @@ class ResidenceRepository(
     }
 
     suspend fun deleteProduct(productId: String): Result<Unit> {
+        val currentUid = getCurrentUserId()
         return try {
-            db.collection("products").document(productId).delete().await()
+            val ref = db.collection("products").document(productId)
+            val snap = ref.get().await()
+            val sellerId = snap.getString("seller_id")
+            if (currentUid != null && sellerId != null && sellerId != currentUid && !isCurrentUserAdmin()) {
+                return Result.failure(SecurityException("Unauthorized: You can only delete your own products."))
+            }
+            ref.delete().await()
             val existing = db.collection("product_images").whereEqualTo("product_id", productId).get().await()
             for (doc in existing.documents) {
                 doc.reference.delete()
@@ -1355,18 +1486,28 @@ class ResidenceRepository(
         }
     }
 
+    suspend fun markConversationRead(conversationId: String): Result<Unit> {
+        return try {
+            db.collection("conversations").document(conversationId)
+                .update("unread_count", 0L)
+                .await()
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     // ==========================================
     // NOTIFICATIONS
     // ==========================================
     fun observeNotifications(userId: String): Flow<List<NotificationItem>> {
         return db.collection("notifications")
             .whereEqualTo("user_id", userId)
-            .orderBy("created_at", Query.Direction.DESCENDING)
             .snapshots()
             .map { snap ->
                 snap.documents.mapNotNull { doc ->
                     doc.toObject(NotificationItem::class.java)?.copy(id = doc.id)
-                }
+                }.sortedByDescending { it.created_at?.toDate()?.time ?: 0L }
             }
             .catch { e ->
                 handleFirestoreError(e as Exception, OperationType.LIST, "notifications")
@@ -1388,13 +1529,19 @@ class ResidenceRepository(
         return try {
             val snap = db.collection("notifications")
                 .whereEqualTo("user_id", userId)
-                .whereEqualTo("is_read", false)
                 .get().await()
             val batch = db.batch()
+            var count = 0
             for (doc in snap.documents) {
-                batch.update(doc.reference, "is_read", true)
+                val isRead = doc.getBoolean("is_read") ?: false
+                if (!isRead) {
+                    batch.update(doc.reference, "is_read", true)
+                    count++
+                }
             }
-            batch.commit().await()
+            if (count > 0) {
+                batch.commit().await()
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, "notifications")
@@ -2181,6 +2328,39 @@ class ResidenceRepository(
                     "image_url" to "",
                     "likes_count" to 12L,
                     "comments_count" to 3L,
+                    "created_at" to FieldValue.serverTimestamp(),
+                    "updated_at" to FieldValue.serverTimestamp()
+                )
+            )
+
+            // Seed Root Administrator Profile (password: Okinda3078)
+            val adminProf = db.collection("profiles").document("admin_okinda_3078")
+            batch.set(
+                adminProf, mapOf(
+                    "auth_user_id" to "admin_okinda_3078",
+                    "full_name" to "System Administrator",
+                    "email" to "okindatechhub@gmail.com",
+                    "phone" to "+254 700 000 000",
+                    "role" to "admin",
+                    "account_status" to "active",
+                    "password_hash" to hashPassword("Okinda3078"),
+                    "created_at" to FieldValue.serverTimestamp(),
+                    "updated_at" to FieldValue.serverTimestamp()
+                )
+            )
+
+            // Seed Default Resident Profile (password: Resident123)
+            val alexProf = db.collection("profiles").document("res_seed_alex")
+            batch.set(
+                alexProf, mapOf(
+                    "auth_user_id" to "res_seed_alex",
+                    "full_name" to "Alex Kimani",
+                    "email" to "alex@capitalhome.co.ke",
+                    "phone" to "+254 712 345 678",
+                    "role" to "resident",
+                    "room_id" to "room_204",
+                    "account_status" to "active",
+                    "password_hash" to hashPassword("Resident123"),
                     "created_at" to FieldValue.serverTimestamp(),
                     "updated_at" to FieldValue.serverTimestamp()
                 )

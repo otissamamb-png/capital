@@ -294,6 +294,19 @@
         "created_at": { "type": "string", "format": "date-time" }
       },
       "required": ["product_id", "image_url"]
+    },
+    "PasswordReset": {
+      "title": "PasswordReset",
+      "description": "Secure OTP verification code for password reset",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "code": { "type": "string" },
+        "expires_at": { "type": "integer" },
+        "used": { "type": "boolean" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "code"]
     }
   },
   "firestore": {
@@ -364,6 +377,10 @@
     "/announcements/{announcementId}": {
       "schema": { "$ref": "#/entities/Announcement" },
       "description": "Official management announcements"
+    },
+    "/password_resets/{email}": {
+      "schema": { "$ref": "#/entities/PasswordReset" },
+      "description": "Password reset OTP tokens"
     }
   }
 }
