@@ -452,7 +452,7 @@ fun PaymentScreen(
             },
             text = {
                 Text(
-                    text = "Your payment reference has been successfully submitted for confirmation. You will receive notifications as the seller verifies payment, makes the product ready for pickup, and completes your order.",
+                    text = "Your payment reference has been successfully submitted for confirmation. You can view your order progress in real time directly on the order tracking screen.",
                     fontSize = 13.sp,
                     color = Slate600,
                     textAlign = TextAlign.Center,

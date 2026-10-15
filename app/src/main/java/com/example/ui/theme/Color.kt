@@ -16,6 +16,8 @@ val AmberPending = Color(0xFFF59E0B)
 val AmberLight = Color(0xFFFFFBEB)
 val RoseOccupied = Color(0xFFEF4444)
 val RoseLight = Color(0xFFFEF2F2)
+val OrangeBuy = Color(0xFFEA580C)
+val OrangeBuyLight = Color(0xFFFFF7ED)
 
 val Slate900 = Color(0xFF0F172A)
 val Slate800 = Color(0xFF1E293B)

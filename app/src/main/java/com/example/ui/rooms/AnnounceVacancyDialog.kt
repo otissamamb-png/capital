@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.UserProfile
 import com.example.data.model.VacancyItem
 import com.example.ui.theme.*
@@ -33,16 +34,21 @@ fun AnnounceVacancyDialog(
     var contactPreference by remember { mutableStateOf("In-App Chat") }
     var isSubmitting by remember { mutableStateOf(false) }
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Card(
             shape = RoundedCornerShape(20.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 16.dp)
+                .fillMaxWidth(0.95f)
+                .fillMaxHeight(0.9f)
+                .padding(vertical = 12.dp)
         ) {
             Column(
                 modifier = Modifier
+                    .fillMaxSize()
                     .padding(20.dp)
                     .verticalScroll(rememberScrollState())
             ) {

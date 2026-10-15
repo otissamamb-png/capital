@@ -14,7 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -174,7 +174,7 @@ fun ProductDetailScreen(
                                 }
                             },
                             enabled = product.quantity > 0,
-                            colors = ButtonDefaults.buttonColors(containerColor = RoyalBlue),
+                            colors = ButtonDefaults.buttonColors(containerColor = OrangeBuy),
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier
                                 .weight(1f)

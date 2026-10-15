@@ -232,7 +232,7 @@ fun AuthScreen(
                     ) {
                         Box(modifier = Modifier.fillMaxSize()) {
                             Image(
-                                painter = painterResource(id = R.drawable.hero_residence_banner_1791459672502),
+                                painter = painterResource(id = R.drawable.capital_home_main_residence_1791905438976),
                                 contentDescription = "Residence",
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize()
@@ -969,7 +969,7 @@ fun AuthScreen(
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, tint = EmeraldAvailable, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Code sent: $generatedVerificationCode (Check your notification drawer)",
+                                    text = "Code: $generatedVerificationCode (Enter code below)",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = EmeraldAvailable

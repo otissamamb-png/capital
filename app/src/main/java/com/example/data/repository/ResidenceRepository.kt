@@ -327,14 +327,6 @@ class ResidenceRepository(
                 )
             ).await()
 
-            context?.let { ctx ->
-                com.example.util.NotificationHelper.showNotification(
-                    ctx,
-                    "Password Reset Verification Code",
-                    "Your Capital Home verification code is $code. Enter this 6-digit code to reset your password (valid for 15 minutes)."
-                )
-            }
-
             Result.success(code)
         } catch (e: Exception) {
             Result.failure(e)
@@ -641,12 +633,20 @@ class ResidenceRepository(
     }
 
     fun observeAllUsers(): Flow<List<UserProfile>> {
+        val excludedUserIds = setOf("seller_brian", "seller_amina", "seller_kelvin", "user_brian", "user_amina", "user_kelvin")
+        val excludedNames = setOf("brian otieno", "amina hassan", "kelvin mugo")
         return db.collection("profiles")
             .orderBy("created_at", Query.Direction.DESCENDING)
             .snapshots()
             .map { snap ->
                 snap.documents.mapNotNull { doc ->
                     doc.toObject(UserProfile::class.java)?.copy(id = doc.id)
+                }.filter { user ->
+                    val nameLower = user.full_name.trim().lowercase()
+                    user.id !in excludedUserIds &&
+                    user.auth_user_id !in excludedUserIds &&
+                    nameLower !in excludedNames &&
+                    !excludedNames.any { nameLower.contains(it) }
                 }
             }
             .catch { e ->
@@ -926,8 +926,25 @@ class ResidenceRepository(
                         trySend(emptyList())
                         return@addSnapshotListener
                     }
+                    val excludedIds = setOf("prod_earbuds", "prod_backpack", "prod_textbooks")
+                    val excludedNames = setOf(
+                        "wireless earbuds pro",
+                        "waterproof campus backpack",
+                        "computer science textbooks set"
+                    )
+                    val excludedSellers = setOf("seller_brian", "seller_amina", "seller_kelvin", "brian otieno", "amina hassan", "kelvin mugo")
+
                     val products = snap?.documents?.mapNotNull { doc ->
                         doc.toObject(MarketplaceProduct::class.java)?.copy(id = doc.id)
+                    }?.filter { prod ->
+                        val nameLower = prod.name.trim().lowercase()
+                        val sellerLower = prod.seller_name.trim().lowercase()
+                        val sellerIdLower = prod.seller_id.trim().lowercase()
+                        prod.id !in excludedIds &&
+                        nameLower !in excludedNames &&
+                        !excludedNames.any { nameLower.contains(it) } &&
+                        sellerIdLower !in excludedSellers &&
+                        sellerLower !in excludedSellers
                     } ?: emptyList()
 
                     if (products.isEmpty()) {
@@ -1207,7 +1224,7 @@ class ResidenceRepository(
             .map { snap ->
                 snap.documents.mapNotNull { doc ->
                     doc.toObject(CommunityPost::class.java)?.copy(id = doc.id)
-                }
+                }.filter { it.id != "post_brian" && it.author_id != "user_brian" && it.author_name != "Brian Otieno" }
             }
             .catch { e ->
                 handleFirestoreError(e as Exception, OperationType.LIST, "posts")
@@ -1873,15 +1890,6 @@ class ResidenceRepository(
                 ).await()
             }
 
-            // Show push notification on device
-            context?.let { ctx ->
-                com.example.util.NotificationHelper.showNotification(
-                    ctx,
-                    "Payment Reference Submitted",
-                    "M-Pesa reference $trimmed sent for verification on Order #$orderNum"
-                )
-            }
-
             Result.success(Unit)
         } catch (e: Exception) {
             handleFirestoreError(e, OperationType.UPDATE, "orders/$orderId")
@@ -1941,14 +1949,6 @@ class ResidenceRepository(
                         "created_at" to FieldValue.serverTimestamp()
                     )
                 ).await()
-
-                context?.let { ctx ->
-                    com.example.util.NotificationHelper.showNotification(
-                        ctx,
-                        if (confirmed) "Order #$orderNum Confirmed!" else "Order #$orderNum Update",
-                        msg
-                    )
-                }
             }
 
             Result.success(Unit)
@@ -2003,14 +2003,6 @@ class ResidenceRepository(
                         "created_at" to FieldValue.serverTimestamp()
                     )
                 ).await()
-
-                context?.let { ctx ->
-                    com.example.util.NotificationHelper.showNotification(
-                        ctx,
-                        "$title: #$orderNum",
-                        msg
-                    )
-                }
             }
 
             Result.success(Unit)
@@ -2089,14 +2081,6 @@ class ResidenceRepository(
                         "created_at" to FieldValue.serverTimestamp()
                     )
                 ).await()
-            }
-
-            context?.let { ctx ->
-                com.example.util.NotificationHelper.showNotification(
-                    ctx,
-                    "Order Cancelled: #$orderNum",
-                    "Order #$orderNum has been cancelled."
-                )
             }
 
             Result.success(Unit)
@@ -2230,75 +2214,12 @@ class ResidenceRepository(
                 )
             )
 
-            // Seed initial verified marketplace products
-            val p1 = db.collection("products").document("prod_earbuds")
-            batch.set(
-                p1, mapOf(
-                    "seller_id" to "seller_brian",
-                    "seller_name" to "Brian Otieno",
-                    "seller_phone" to "+254 712 345 678",
-                    "category" to "Electronics",
-                    "name" to "Wireless Earbuds Pro",
-                    "description" to "Active noise cancelling, deep bass, 24-hour battery life. Perfect for study sessions in the residence.",
-                    "price" to 1500L,
-                    "quantity" to 5L,
-                    "condition" to "New",
-                    "location" to "Room 204, Capital Home",
-                    "image_url" to "",
-                    "status" to "Active",
-                    "payment_method" to "Lipa na M-Pesa Till",
-                    "payment_number" to "5432109",
-                    "payment_name" to "Brian Electronics",
-                    "created_at" to FieldValue.serverTimestamp(),
-                    "updated_at" to FieldValue.serverTimestamp()
-                )
-            )
-
-            val p2 = db.collection("products").document("prod_backpack")
-            batch.set(
-                p2, mapOf(
-                    "seller_id" to "seller_amina",
-                    "seller_name" to "Amina Hassan",
-                    "seller_phone" to "+254 722 987 654",
-                    "category" to "Fashion",
-                    "name" to "Waterproof Campus Backpack",
-                    "description" to "Ergonomic laptop backpack with USB charging port and multiple compartments.",
-                    "price" to 2500L,
-                    "quantity" to 2L,
-                    "condition" to "New",
-                    "location" to "Room 108, Capital Home",
-                    "image_url" to "",
-                    "status" to "Active",
-                    "payment_method" to "Send Money",
-                    "payment_number" to "0722987654",
-                    "payment_name" to "Amina Hassan",
-                    "created_at" to FieldValue.serverTimestamp(),
-                    "updated_at" to FieldValue.serverTimestamp()
-                )
-            )
-
-            val p3 = db.collection("products").document("prod_textbooks")
-            batch.set(
-                p3, mapOf(
-                    "seller_id" to "seller_kelvin",
-                    "seller_name" to "Kelvin Mugo",
-                    "seller_phone" to "+254 733 112 233",
-                    "category" to "Books",
-                    "name" to "Computer Science Textbooks Set",
-                    "description" to "Data Structures, Algorithms and Database Systems textbooks in excellent condition.",
-                    "price" to 800L,
-                    "quantity" to 1L,
-                    "condition" to "Like New",
-                    "location" to "Room 302, Capital Home",
-                    "image_url" to "",
-                    "status" to "Active",
-                    "payment_method" to "Lipa na M-Pesa Pochi",
-                    "payment_number" to "0733112233",
-                    "payment_name" to "Kelvin Mugo",
-                    "created_at" to FieldValue.serverTimestamp(),
-                    "updated_at" to FieldValue.serverTimestamp()
-                )
-            )
+            // Clean up / remove deleted products and accounts completely
+            val toDeleteProductIds = listOf("prod_earbuds", "prod_backpack", "prod_textbooks")
+            val toDeleteProfileIds = listOf("seller_brian", "seller_amina", "seller_kelvin", "user_brian")
+            toDeleteProductIds.forEach { batch.delete(db.collection("products").document(it)) }
+            toDeleteProfileIds.forEach { batch.delete(db.collection("profiles").document(it)) }
+            batch.delete(db.collection("posts").document("post_brian"))
 
             // Seed initial community posts
             val post1 = db.collection("posts").document("post_faith")
@@ -2312,22 +2233,6 @@ class ResidenceRepository(
                     "image_url" to "",
                     "likes_count" to 24L,
                     "comments_count" to 6L,
-                    "created_at" to FieldValue.serverTimestamp(),
-                    "updated_at" to FieldValue.serverTimestamp()
-                )
-            )
-
-            val post2 = db.collection("posts").document("post_brian")
-            batch.set(
-                post2, mapOf(
-                    "author_id" to "user_brian",
-                    "author_name" to "Brian Otieno",
-                    "author_photo" to "",
-                    "content" to "Anyone interested in joining a weekend study group for Software Engineering? Meeting up in the common room at 5pm.",
-                    "post_type" to "Question",
-                    "image_url" to "",
-                    "likes_count" to 12L,
-                    "comments_count" to 3L,
                     "created_at" to FieldValue.serverTimestamp(),
                     "updated_at" to FieldValue.serverTimestamp()
                 )
@@ -2372,4 +2277,46 @@ class ResidenceRepository(
             Log.w("ResidenceRepo", "Initial seed check: ${e.message}")
         }
     }
+
+    suspend fun cleanUpRemovedAccountsAndProducts() {
+        try {
+            val toDeleteProductIds = listOf("prod_earbuds", "prod_backpack", "prod_textbooks")
+            val toDeleteProfileIds = listOf("seller_brian", "seller_amina", "seller_kelvin", "user_brian", "user_amina", "user_kelvin")
+            toDeleteProductIds.forEach { id ->
+                try { db.collection("products").document(id).delete().await() } catch (_: Exception) {}
+            }
+            toDeleteProfileIds.forEach { id ->
+                try { db.collection("profiles").document(id).delete().await() } catch (_: Exception) {}
+            }
+            try { db.collection("posts").document("post_brian").delete().await() } catch (_: Exception) {}
+
+            // Delete any products matching the excluded titles or seller names from cloud Firestore
+            val snap = db.collection("products").get().await()
+            for (doc in snap.documents) {
+                val name = (doc.getString("name") ?: "").lowercase().trim()
+                val sellerName = (doc.getString("seller_name") ?: "").lowercase().trim()
+                val sellerId = (doc.getString("seller_id") ?: "").lowercase().trim()
+                if (name.contains("computer science textbooks") ||
+                    name.contains("wireless earbuds") ||
+                    name.contains("waterproof campus backpack") ||
+                    sellerName in listOf("brian otieno", "amina hassan", "kelvin mugo") ||
+                    sellerId in listOf("seller_brian", "seller_amina", "seller_kelvin", "user_brian", "user_amina", "user_kelvin")
+                ) {
+                    try { doc.reference.delete().await() } catch (_: Exception) {}
+                }
+            }
+
+            // Delete any profiles matching those names from cloud Firestore
+            val profSnap = db.collection("profiles").get().await()
+            for (doc in profSnap.documents) {
+                val fullName = (doc.getString("full_name") ?: "").lowercase().trim()
+                if (fullName in listOf("brian otieno", "amina hassan", "kelvin mugo")) {
+                    try { doc.reference.delete().await() } catch (_: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.w("ResidenceRepo", "cleanUpRemovedAccountsAndProducts error: ${e.message}")
+        }
+    }
 }
+

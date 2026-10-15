@@ -2,13 +2,12 @@ package com.example
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,7 +15,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.*
 import com.example.data.repository.ResidenceRepository
@@ -67,23 +68,6 @@ fun CapitalHomeApp() {
     val context = LocalContext.current
     val repository = remember { ResidenceRepository.create(context) }
     var currentSessionUser by remember { mutableStateOf(repository.getCurrentSessionUser()) }
-
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { _ -> }
-
-    LaunchedEffect(Unit) {
-        com.example.util.NotificationHelper.clearAllNotifications(context)
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (androidx.core.content.ContextCompat.checkSelfPermission(
-                    context,
-                    android.Manifest.permission.POST_NOTIFICATIONS
-                ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
-    }
 
     DisposableEffect(Unit) {
         val listener = FirebaseAuth.AuthStateListener { auth ->
@@ -148,9 +132,10 @@ fun MainResidenceContent(
     val coroutineScope = rememberCoroutineScope()
     val repository = remember { ResidenceRepository.create(context) }
 
-    // Seed database on first launch
+    // Seed database on first launch & clean up removed accounts
     LaunchedEffect(Unit) {
         repository.seedInitialDataIfEmpty()
+        repository.cleanUpRemovedAccountsAndProducts()
     }
 
     // State flows from persistent cloud database
@@ -171,9 +156,8 @@ fun MainResidenceContent(
     val allOrders by repository.observeAllOrders().collectAsStateWithLifecycle(initialValue = emptyList())
     val allUsers by repository.observeAllUsers().collectAsStateWithLifecycle(initialValue = emptyList())
 
-    // Ensure profile is created in database if not present and register FCM token
+    // Ensure profile is created in database if not present
     LaunchedEffect(userId) {
-        com.example.service.CapitalHomeFirebaseMessagingService.registerCurrentToken(userId)
         val existing = repository.getProfileOnce(userId)
         if (existing == null) {
             val session = repository.getCurrentSessionUser()
@@ -602,8 +586,9 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 0,
                             onClick = { selectedTab = 0 },
+                            alwaysShowLabel = true,
                             icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
-                            label = { Text("Home", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Home", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -616,8 +601,9 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 1,
                             onClick = { selectedTab = 1 },
+                            alwaysShowLabel = true,
                             icon = { Icon(Icons.Default.MeetingRoom, contentDescription = "Rooms") },
-                            label = { Text("Rooms", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Rooms", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -630,8 +616,9 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 2,
                             onClick = { selectedTab = 2 },
+                            alwaysShowLabel = true,
                             icon = { Icon(Icons.Default.Storefront, contentDescription = "Marketplace") },
-                            label = { Text("Marketplace", fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Market", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 2) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -644,8 +631,9 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 3,
                             onClick = { selectedTab = 3 },
+                            alwaysShowLabel = true,
                             icon = { Icon(Icons.Default.DynamicFeed, contentDescription = "Posts") },
-                            label = { Text("Posts", fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Posts", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 3) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -658,6 +646,7 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 4,
                             onClick = { selectedTab = 4 },
+                            alwaysShowLabel = true,
                             icon = {
                                 BadgedBox(
                                     badge = {
@@ -667,10 +656,10 @@ fun MainResidenceContent(
                                         }
                                     }
                                 ) {
-                                    Icon(Icons.Default.Chat, contentDescription = "Chats")
+                                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = "Chats")
                                 }
                             },
-                            label = { Text("Chats", fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Chats", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 4) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,
@@ -683,8 +672,9 @@ fun MainResidenceContent(
                         NavigationBarItem(
                             selected = selectedTab == 5,
                             onClick = { selectedTab = 5 },
+                            alwaysShowLabel = true,
                             icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
-                            label = { Text("Profile", fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
+                            label = { Text("Profile", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = if (selectedTab == 5) FontWeight.Bold else FontWeight.Normal) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = RoyalBlue,
                                 selectedTextColor = RoyalBlue,

@@ -10,6 +10,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -163,7 +164,7 @@ fun HomeScreen(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     Image(
-                        painter = painterResource(id = R.drawable.hero_residence_banner_1791459672502),
+                        painter = painterResource(id = R.drawable.capital_home_main_residence_1791905438976),
                         contentDescription = "Capital Home Residence",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize()
@@ -293,7 +294,7 @@ fun HomeScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        Icons.Default.ReceiptLong,
+                                        Icons.AutoMirrored.Filled.ReceiptLong,
                                         contentDescription = null,
                                         tint = RoyalBlue,
                                         modifier = Modifier.size(16.dp)
@@ -807,7 +808,7 @@ fun HomeProductCard(
                     "electronics", "phones" -> Icons.Default.Headphones
                     "fashion", "shoes" -> Icons.Default.Checkroom
                     "food" -> Icons.Default.Fastfood
-                    "books" -> Icons.Default.MenuBook
+                    "books" -> Icons.AutoMirrored.Filled.MenuBook
                     else -> Icons.Default.ShoppingBag
                 }
                 SafeImage(
@@ -867,7 +868,7 @@ fun HomeProductVerticalCard(
                     "electronics", "phones" -> Icons.Default.Headphones
                     "fashion", "shoes" -> Icons.Default.Checkroom
                     "food" -> Icons.Default.Fastfood
-                    "books" -> Icons.Default.MenuBook
+                    "books" -> Icons.AutoMirrored.Filled.MenuBook
                     else -> Icons.Default.ShoppingBag
                 }
                 SafeImage(

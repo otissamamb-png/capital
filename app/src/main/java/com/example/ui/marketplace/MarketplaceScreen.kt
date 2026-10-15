@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -97,7 +98,7 @@ fun MarketplaceScreen(
                             onClick = onOrdersClick,
                             modifier = Modifier.testTag("marketplace_orders_button")
                         ) {
-                            Icon(Icons.Default.ReceiptLong, contentDescription = "My Orders", tint = Slate700)
+                            Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = "My Orders", tint = Slate700)
                         }
 
                         // Cart Button with badge
@@ -293,7 +294,7 @@ fun ProductGridCard(
                     "electronics", "phones" -> Icons.Default.Headphones
                     "fashion", "shoes" -> Icons.Default.Checkroom
                     "food" -> Icons.Default.Fastfood
-                    "books" -> Icons.Default.MenuBook
+                    "books" -> Icons.AutoMirrored.Filled.MenuBook
                     else -> Icons.Default.ShoppingBag
                 }
                 SafeImage(

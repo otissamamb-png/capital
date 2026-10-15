@@ -169,7 +169,7 @@ fun SellerApplicationScreen(
                                     value = businessName,
                                     onValueChange = { businessName = it },
                                     label = { Text("Business / Shop Name") },
-                                    placeholder = { Text("e.g. Brian's Tech Store") },
+                                    placeholder = { Text("e.g. Campus Tech Store") },
                                     singleLine = true,
                                     modifier = Modifier.fillMaxWidth().testTag("seller_business_name_input")
                                 )

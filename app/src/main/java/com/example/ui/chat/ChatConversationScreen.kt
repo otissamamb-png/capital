@@ -118,7 +118,7 @@ fun ChatConversationScreen(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = conversation.other_user_name.ifEmpty { "Brian Otieno" },
+                                text = conversation.other_user_name.ifEmpty { "Resident" },
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold
                             )
