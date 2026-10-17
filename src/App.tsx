@@ -1,11 +1,27 @@
-import { useState } from 'react'
-import { useAuth } from './auth'
+import { Component, ReactNode, useState } from 'react'
+import { AuthProvider, useAuth } from './auth'
 import AuthScreen from './screens/AuthScreen'
 import HomeScreen from './screens/HomeScreen'
 import RoomsScreen from './screens/RoomsScreen'
 import MarketplaceScreen from './screens/MarketplaceScreen'
 import CommunityScreen from './screens/CommunityScreen'
 import ProfileScreen from './screens/ProfileScreen'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null as Error | null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, fontFamily: 'sans-serif' }}>
+          <h2>Something went wrong</h2>
+          <p style={{ color: '#64748b' }}>{this.state.error.message}</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 const TABS = [
   { id: 'home', label: 'Home' },
@@ -18,6 +34,16 @@ const TABS = [
 type TabId = (typeof TABS)[number]['id']
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AuthProvider>
+        <MainApp />
+      </AuthProvider>
+    </ErrorBoundary>
+  )
+}
+
+function MainApp() {
   const { session, profile, loading, signOut } = useAuth()
   const [tab, setTab] = useState<TabId>('home')
 
